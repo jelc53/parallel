@@ -1,0 +1,113 @@
+\documentclass[12pt,letterpaper,twoside]{article}
+
+\newif\ifsolution\solutiontrue   % Include the solutions
+%\newif\ifsolution\solutionfalse  % Exclude the solutions
+
+\usepackage{cme213}
+\usepackage{xcolor}
+
+\newcommand{\T}[1]{\text{\texttt{#1}}}
+\newcommand{\V}[1]{\text{\textit{#1}}}
+
+\begin{document}
+
+{\centering \textbf{Homework 1\\ Due Friday, April 8th via GradeScope\\}}
+\vspace*{-8pt}\noindent\rule{\linewidth}{1pt}
+
+\paragraph{Question 0: } Our graph is undirected, but we could use it to build a
+\href{https://en.wikipedia.org/wiki/Directed_graph#Definition}{\emph{directed} graph} or \emph{digraph}. 
+A digraph's edges are \emph{ordered} pairs of nodes $(n_i, n_j)$, rather than unordered pairs $\{n_i, n_j\}$; 
+all operations look like their undirected counterparts and have similar complexity.
+
+Here's one digraph representation using our graph class.
+\begin{cpp}
+template <typename V> 
+class Digraph { 
+... 
+private:
+Graph<V> g_;
+};
+\end{cpp}
+Explain the representation by giving an abstraction function and
+representation invariant. Note that \texttt{Digraph} is not
+\texttt{Graph}'s friend and can only use \texttt{Graph}'s public
+interface. \\
+
+{\color{purple}Idea: Want to represent each node of the directed graph with two nodes of 
+the undirected graph , i.e. an output (even idx) and input (odd idx).
+
+$AF$(Digraph) = ($N$, $E$) where
+\begin{itemize}
+    \item $N = \{\{n_{2i}, n_{2i+1}\}$ $|$ $0 <= i <$ g\_.num\_nodes()\}
+    \item $E = \{\{n_{i}, n_{j}\}$ $|$ j - i $\%$ 2 == 1, i $\in$ adj\_[j]\}
+\end{itemize}
+
+$RI$(Digraph): 
+\begin{itemize}
+    \item Size of nodes set $N$ = 2 * g\_.num\_nodes()
+    \item Size of edges set $E$ = g\_.num\_edges()
+\end{itemize}
+
+}
+
+
+\paragraph{Question 1: } The \href{https://en.cppreference.com/w/cpp/container/vector/resize}{\texttt{vector<T>::resize}} 
+operation extends a vector with \emph{memory initialized} elements. (For example, after \texttt{vector<int> v; v.resize(20)}, \texttt{v} 
+contains 20 zeroes in memory.) This is almost always what we want, but it can be useful to extend a vector with \emph{uninitialized
+  memory}. Here's an example: uninitialized memory helps build a \emph{sparse
+  vector}, in which elements are initialized only when first referenced. We
+assume a special \texttt{garbage\_vector} type whose \texttt{resize} method does
+not initialize new memory. \textbf{See next page}\\ \textbf{Note:} This question will
+not completely make sense until you understand what the code is doing below!
+
+\newpage
+\begin{cpp}
+template <typename T> 
+class sparse_vector {
+garbage_vector<size_t> position_;
+vector<size_t> check_;
+vector<T> value_;
+public:
+// Construct a sparse vector with all elements equal to T().
+sparse_vector() {}
+// Return a reference to the element at position @a i.
+T& operator[](size_t i) {
+    // If out of bounds, we must re-size our array and add 
+    // (uninitialized) memory!
+    if (i >= position_.size())
+    position_.resize(i + 1);
+    // If we haven't initialized the memory yet, go ahead and do so now.
+    if (position_[i] >= check_.size() || check_[position_[i]] != i) {
+    position_[i] = check_.size(); // First reference to the element ati.
+    check_.push_back(i);          // We associate an index...
+    value_.push_back(T());        // ...alongside a value.
+    }
+    return value_[position_[i]];
+}
+};
+\end{cpp}
+
+An abstract \texttt{sparse\_vector} value is an \textbf{infinite} vector.
+
+Write an abstraction function and representation invariant for
+\texttt{sparse\_vector}.
+
+{\color{purple}Idea: Want to describe the functionality and representation invariants
+of our infinite vector. In particular, how does the implementation above guarantee operator 
+[] works for all positive integer inputs i without initializing memory address of locations
+for each resize. 
+
+$AF$(sparse\_vector) = an infinite vector $V$ such that $V[i]$ returns an integer 
+for all $i \in $ positive integers
+
+$RI$(sparse\_vector): 
+\begin{itemize}
+    \item check\_.size() == value\_.size()
+    \item *max\_element(check\_.begin(), check\_.end()) + 1 = position\_.size()
+\end{itemize}
+
+}
+
+
+
+\end{document}
