@@ -4,7 +4,7 @@
 #include <set>
 #include <stdexcept>
 
-// TODO: add your function here. The function should count the number of
+// Add your function here. The function should count the number of
 // entries between lb and ub.
 unsigned int count_range(const std::set<double>& data, 
                          const double lb,
@@ -30,7 +30,7 @@ int main() {
 
   // Count test
   assert(count_range(data_simple, 3, 6) == 4);
-  std::cout << "Count test passed." << std::endl;
+  //std::cout << "Count test passed." << std::endl;
 
   // Test with N(0,1) data.
   std::set<double> data_rng;
