@@ -1,0 +1,158 @@
+\documentclass[12pt,letterpaper,twoside]{article}
+
+\newif\ifsolution\solutiontrue   % Include the solutions
+%\newif\ifsolution\solutionfalse  % Exclude the solutions
+
+\usepackage{cme213}
+\usepackage{xcolor}
+
+\newcommand{\T}[1]{\text{\texttt{#1}}}
+\newcommand{\V}[1]{\text{\textit{#1}}}
+
+\begin{document}
+
+{\centering \textbf{Homework 1\\ Due Friday, April 8th via GradeScope\\}}
+\vspace*{-8pt}\noindent\rule{\linewidth}{1pt}
+
+\paragraph{Problem 1: } Implement the \texttt{Matrix} and \texttt{MatrixSymmetric} 
+class in the given \texttt{Matrix.hpp}. 
+
+Idea: only store diagonal and one side (upper or lower triangle) 
+of the symmetric matrix data to avoid duplication and meet required memory 
+constraints: $n(n+1)/2$ + O(1).
+
+Submitted code passes all tests in \texttt{main\_q1.cpp}. See output below.
+\begin{verbatim}
+$ make main_q1
+g++ -std=c++11 -g -Wall -Wextra -pedantic main_q1.cpp -o main_q1
+
+$ ./main_q1
+Default constructor test passed.
+Empty matrix test passed.
+Negative size constructor test passed.
+L0Norm test passed.
+Initialization and retrieval tests passed.
+Out of bounds test passed.
+Stream operator test passed.
+\end{verbatim}
+
+
+\paragraph{Problem 2: } Complete the code given in \texttt{main\_q2.cpp} 
+and demonstrate how we might append different types of matricies to the 
+same \texttt{std::vector}.
+
+Idea: setup polymorphism relationship between the \texttt{Matrix} 
+base class and the \texttt{SparseMatrix} and \texttt{ToeplitzMatrix}
+derived classes. 
+
+This allows us to call the same \texttt{repr()} method 
+on different matrix types and our program will sort out which derived 
+string representation function to execute.
+
+Our example with two matrix types demonstrates this concept.
+See console output below.
+\begin{verbatim}
+$ make main_q2
+g++ -std=c++11 -g -Wall -Wextra -pedantic main_q2.cpp -o main_q2
+
+$ ./main_q2
+sparse
+toeplitz
+\end{verbatim}
+
+
+\paragraph{Problem 3: } Complete the code given in \texttt{main\_q3.cpp}
+and demonstrate that function \texttt{count\_range()} efficiently queries
+the number of entries in a given set.
+
+Idea: use in-built lower and upper bound methods from \texttt{set}
+class to find iterators pointing to the first element 'not less than'
+\texttt{lb} and the first element 'greater than' \texttt{ub}. 
+
+We then can compute the "distance" between these two iterators to
+find the count of entries contained by our set within range [lb, ub].
+
+Console outputs below.
+\begin{verbatim}
+$ make main_q3
+g++ -std=c++11 -g -Wall -Wextra -pedantic main_q3.cpp -o main_q3
+
+$ ./main_q3
+Range test passed.
+Count test passed.
+Number of elements in range [-1, 1]: 6843 (est. = 6830)
+\end{verbatim}
+
+
+\paragraph{Problem 4: } Solve the following involving the c++ standard
+library. You are not allowed to use any loops outside of testing.
+
+\begin{itemize}
+    \item \textbf{4a. Implement DAXPY} Since our DAXPY function takes
+    const references vector arguments x and y, I chose to use 
+    \texttt{std::transform} from the standard library to avoid
+    inplace operations. I then implement $ax + y$ logic using a 
+    short lambda function.
+
+    \item \textbf{4b. Compute student grades.} Idea: use \texttt{std::all\_of}
+    to check whether all students in our vector input argument passed
+    their course. We can incorporate the logic associated with 'passing'
+    in the predicate, which in this case can be a short lambda function.
+
+    \item \textbf{4c. Sort with odd first.} Our sort criteria for this problem 
+    is non-standard which pushes us to implement a custom comparison 
+    functor (struct with operator()) to use in the \texttt{std::sort}
+    algorithm.
+
+    \item \textbf{4d. Sort linked list.} Not all sorts work on linked lists.
+    For this problem we need to use the \texttt{std::list<T>::sort} in-built
+    list sort method and incorporate a custom comparison functor as we did
+    in part (C). In this case, our comparison functor needs to interpret 
+    public member attributes from the \texttt{SparseMatrixCoordinate} 
+    class to resolve its boolean operation.
+
+\end{itemize}
+
+Console logs from 4a-d.
+\begin{verbatim}
+$ make main_q4
+g++ -std=c++11 -g -Wall -Wextra -pedantic main_q4.cpp -o main_q4
+
+$ ./main_q4
+Q4a: PASSED
+Q4b: PASSED
+Q4b: PASSED
+Q4b: PASSED
+Q4b: PASSED
+Q4c: PASSED
+Q4d empty list: PASSED
+Q4d: PASSED
+\end{verbatim}
+
+Submission information logs.
+\begin{verbatim}
+$ /afs/ir.stanford.edu/class/cme213/script/submit.py hw1 private/cme213-jelc53/hw1
+Submission for assignment 'hw1' as user 'jelc'
+Attempt 1/10
+Time stamp: 2022-04-01 20:53
+List of files being copied:
+    private/cme213-jelc53/hw1/main_q1.cpp	 [3875 bytes]
+    private/cme213-jelc53/hw1/main_q2.cpp	 [1213 bytes]
+    private/cme213-jelc53/hw1/main_q3.cpp	 [1362 bytes]
+    private/cme213-jelc53/hw1/main_q4.cpp	 [5117 bytes]
+    private/cme213-jelc53/hw1/matrix.hpp	 [3036 bytes]
+
+Your files were copied successfully.
+Directory where files were copied: /afs/ir.stanford.edu/class/cme213/submissions/hw1/jelc/1
+List of files in this directory:
+    main_q1.cpp	 [3875 bytes]
+    main_q2.cpp	 [1213 bytes]
+    main_q3.cpp	 [1362 bytes]
+    main_q4.cpp	 [5117 bytes]
+    matrix.hpp	 [3036 bytes]
+    metadata	 [137 bytes]
+
+This completes the submission process. Thank you!
+\end{verbatim}
+
+\end{document}
