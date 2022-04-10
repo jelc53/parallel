@@ -2,7 +2,11 @@
 #define PARALLEL_RADIX_SORT
 
 #include <algorithm>
+#include <iostream>
 #include <vector>
+#include <bitset>
+#include <math.h>
+#include <omp.h>
 #include "test_util.h"
 
 
@@ -25,7 +29,27 @@ std::vector<uint> computeBlockHistograms(
     uint blockSize
 ) {
     std::vector<uint> blockHistograms(numBlocks * numBuckets, 0);
-    // TODO
+    uint mask = 1;
+
+    #pragma omp parallel for collapse(2)
+    // loop through blocks
+    for (uint i=0; i<numBlocks; i++) {
+        // loop through elements of blocks
+        for (uint j=0; j<blockSize; j++) {
+            // index of target input element
+            uint idx = i*blockSize + j;
+            
+            // compute key
+            uint key = 0;
+            for (uint k=0; k<numBits; k++) {
+                uint key_bit = (keys[idx] >> (startBit+k)) & mask;
+                key += key_bit*pow(2,k);
+            }         
+
+            // update block histogram 
+            ++blockHistograms[key + i*numBuckets];
+        }
+    }
     return blockHistograms;
 }
 

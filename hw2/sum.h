@@ -1,6 +1,6 @@
-#include<vector>
-#include<omp.h>
-#include<iostream>
+#include <vector>
+#include <omp.h>
+#include <iostream>
 
 std::vector<uint> serialSum(const std::vector<uint> &v) 
 {
