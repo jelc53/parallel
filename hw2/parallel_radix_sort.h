@@ -80,7 +80,10 @@ std::vector<uint> scanGlobalHisto(
     uint numBuckets
 ) {
     std::vector<uint> globalHistoExScan(numBuckets, 0);
-    // TODO
+    std::partial_sum(globalHisto.begin(), 
+                     --globalHisto.end(), 
+                     ++globalHistoExScan.begin(), 
+                     std::plus<uint>());
     return globalHistoExScan;
 }
 
