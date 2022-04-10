@@ -64,7 +64,10 @@ std::vector<uint> reduceLocalHistoToGlobal(
     uint numBuckets
 ) {
     std::vector<uint> globalHisto(numBuckets, 0);
-    // TODO
+    for (uint i=0; i<blockHistograms.size(); i++) {
+        uint idx = i % numBuckets;
+        globalHisto[idx] += blockHistograms[i];
+    }
     return globalHisto;
 }
 

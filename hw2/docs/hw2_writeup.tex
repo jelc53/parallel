@@ -61,6 +61,36 @@ main_q1.cpp:60:main     TEST PASSED.
 
 \paragraph{Problem 2: } Implement Radix Sort in parallel ...
 
+\begin{itemize}
+    \item \textbf{Question 1: computeBlockHistograms()} Idea: using \texttt{openMP}
+    to parallelize computation across "blocks" when creaing local histograms.
+    Code must pass Test1().
+
+    \begin{verbatim}
+    $ make main_q2
+    g++ -std=c++11 -g -Wall -O3 -fopenmp main_q2.cpp -o main_q2
+
+    $ ./main_q2
+    tests_q2.h:22:Test1     TEST PASSED.
+    \end{verbatim}
+
+    \item \textbf{Question 2: reduceLocalHistoToGlobal()} Idea: accumulate values 
+    based on the remainder of the \texttt{index} divided by \texttt{bucketSize}.
+    Code must pass Test2().
+
+    \begin{verbatim}
+    $ make main_q2
+    g++ -std=c++11 -g -Wall -O3 -fopenmp main_q2.cpp -o main_q2
+
+    $ ./main_q2
+    tests_q2.h:22:Test1     TEST PASSED.
+    tests_q2.h:38:Test2     TEST PASSED.
+    \end{verbatim}
+
+    \item \textbf{Question 3: scanGlocalHisto()} Idea: ...
+
+\end{itemize}
+
 Submission information logs.
 \begin{verbatim}
 $ /afs/ir.stanford.edu/class/cme213/script/submit.py hw1 private/cme213-jelc53/hw1
