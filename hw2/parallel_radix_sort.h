@@ -100,7 +100,21 @@ std::vector<uint> computeBlockExScanFromGlobalHisto(
     const std::vector<uint> &blockHistograms
 ) {
     std::vector<uint> blockExScan(numBuckets * numBlocks, 0);
-    // TODO
+    for (uint i=0; i<numBlocks; i++) {
+        for (uint j=0; j<numBuckets; j++) {
+            uint idx = i*numBuckets + j;
+            if (i==0) { 
+                // first block populated with global scan
+                blockExScan[idx] = globalHistoExScan[idx]; 
+            }
+            else { 
+                // subsequent blocks incremented
+                uint prev = blockExScan[idx-numBuckets];
+                uint incr = blockHistograms[idx-numBuckets];
+                blockExScan[idx] = prev + incr;
+            }
+        }
+    }
     return blockExScan;
 }
 
