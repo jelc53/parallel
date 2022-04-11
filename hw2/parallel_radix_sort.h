@@ -31,7 +31,7 @@ std::vector<uint> computeBlockHistograms(
     std::vector<uint> blockHistograms(numBlocks * numBuckets, 0);
     uint mask = 1;
 
-    #pragma omp parallel for collapse(2)
+    #pragma omp parallel for
     // loop through blocks
     for (uint i=0; i<numBlocks; i++) {
         // loop through elements of blocks
@@ -212,11 +212,21 @@ int radixSortParallel(
 }
 
 
-void runBenchmark(std::vector<uint>& keys_parallel, std::vector<uint>& temp_keys, uint kNumBits, uint n_blocks, uint n_threads){
-    // TODO: Call omp_set_num_threads() with the correct argument
+void runBenchmark(std::vector<uint>& keys_parallel, 
+                  std::vector<uint>& temp_keys, 
+                  uint kNumBits, 
+                  uint n_blocks, 
+                  uint n_threads
+){
+    // Call omp_set_num_threads() with the correct argument
+    omp_set_num_threads(n_threads);
 
     double startRadixParallel = omp_get_wtime();
-    // TODO: Call radixSortParallel() with the correct arguments
+    // Call radixSortParallel() with the correct arguments
+    radixSortParallel(keys_parallel,
+                      temp_keys,
+                      kNumBits,
+                      n_blocks);
 
     double endRadixParallel = omp_get_wtime();
     printf("%8.3f", endRadixParallel - startRadixParallel);
