@@ -133,7 +133,31 @@ void populateOutputFromBlockExScan(
     const std::vector<uint> &keys,
     std::vector<uint> &sorted
 ) {
-    // TODO
+    #pragma omp parallel for
+    for (uint i=0; i<numBlocks; i++) {
+        // copy relevant blockExScan sgement
+        std::vector<uint> tmp(numBuckets, 0);
+
+        for (uint j=0; j<blockSize; j++) {
+            // extract keys idx
+            uint idx = i*blockSize + j;
+            
+            // compute key (bucket id)
+            uint key = 0;
+            for (uint k=0; k<numBits; k++) {
+                uint key_bit = (keys[idx] >> (startBit+k)) & 1;
+                key += key_bit*pow(2,k);
+            }
+
+            // resolve target_idx, increment
+            uint target_idx = blockExScan[i*numBuckets+key] + tmp[key];
+            ++tmp[key];
+
+            // update sorted list
+            sorted[target_idx] = keys[idx];
+            
+        }
+    }
 }
 
 /* Function: radixSortParallelPass

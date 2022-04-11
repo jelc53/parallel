@@ -11,7 +11,7 @@
 
 \begin{document}
 
-{\centering \textbf{Homework 1\\ Due Friday, April 8th via GradeScope\\}}
+{\centering \textbf{Homework 2\\ Due Friday, April 22nd via GradeScope\\}}
 \vspace*{-8pt}\noindent\rule{\linewidth}{1pt}
 
 \paragraph{Problem 1: } Implement a parallel function that sums separately the odd
@@ -86,7 +86,7 @@ main_q1.cpp:60:main     TEST PASSED.
     tests_q2.h:38:Test2     TEST PASSED.
     \end{verbatim}
 
-    \item \textbf{Question 3: scanGlocalHisto()} Idea: implement cumulative sum 
+    \item \textbf{Question 3: scanGlobalHisto()} Idea: implement cumulative sum 
     using \texttt{std::partial\_sum} standard library function. Note, needed to 
     adjust \texttt{Output Iterator} and \texttt{Input Iterator} to ensure we 
     begin at zero and do not inadvertedly overflow.
@@ -101,7 +101,8 @@ main_q1.cpp:60:main     TEST PASSED.
 
     \item \textbf{Question 4: computeBlockExScanFromGlobalHisto()} Idea: populate first
     using \texttt{globalHistoScan} and then increment using \texttt{blockHisograms}
-    for subseuqent blocks. 
+    for subseuqent blocks. This has the effect of splitting the global histogram
+    into blocks need to update our sorting algorithm (next step).
     
     \begin{verbatim}
     $ make main_q2
@@ -111,7 +112,24 @@ main_q1.cpp:60:main     TEST PASSED.
     tests_q2.h:67:Test4     TEST PASSED.
     \end{verbatim}
 
-    \item \textbf{Question 5: populateOutputFromBlockExScan()} Idea: ...
+    \item \textbf{Question 5: populateOutputFromBlockExScan()} Idea: use pre-computed
+    \texttt{blockEx Scan} to help target where entries of our unsorted input vector
+    should map to in \texttt{sorted}. We can parallelize this operation by block using 
+    \texttt{openMP}. Note, we still need to re-compute which "bucket" each of our unsorted 
+    entries are from at each step since this information is not stored and passed to the 
+    function. 
+    
+    Also, this step only succeeds in sorting our input up to the \texttt{numBits}'th 
+    bit (in this case 8 bits of sorting per pass). Subsequent "passes" are needed to complete
+    our radix sort algorithm since many input entires are greater than 256 (limit of 8 bits).
+
+    \begin{verbatim}
+    $ make main_q2
+    g++ -std=c++11 -g -Wall -O3 -fopenmp main_q2.cpp -o main_q2
+
+    $ ./main_q2
+    tests_q2.h:84:Test5     TEST PASSED.
+    \end{verbatim}
 
 \end{itemize}
 
