@@ -29,22 +29,23 @@ std::vector<uint> computeBlockHistograms(
     uint blockSize
 ) {
     std::vector<uint> blockHistograms(numBlocks * numBuckets, 0);
-    uint mask = 1;
+    uint mask = numBuckets - 1;
 
     #pragma omp parallel for
     // loop through blocks
     for (uint i=0; i<numBlocks; i++) {
+
+        // uint delta = keys.size() - i*blockSize;
+        // uint blockSizeAdj = std::min(blockSize, delta);
+
         // loop through elements of blocks
         for (uint j=0; j<blockSize; j++) {
+
             // index of target input element
             uint idx = i*blockSize + j;
             
             // compute key
-            uint key = 0;
-            for (uint k=0; k<numBits; k++) {
-                uint key_bit = (keys[idx] >> (startBit+k)) & mask;
-                key += key_bit*pow(2,k);
-            }         
+            uint key = (keys[idx] >> startBit) & mask;   
 
             // update block histogram 
             ++blockHistograms[key + i*numBuckets];
@@ -133,6 +134,8 @@ void populateOutputFromBlockExScan(
     const std::vector<uint> &keys,
     std::vector<uint> &sorted
 ) {
+    uint mask = numBuckets - 1;
+
     #pragma omp parallel for
     for (uint i=0; i<numBlocks; i++) {
         // copy relevant blockExScan sgement
@@ -143,11 +146,7 @@ void populateOutputFromBlockExScan(
             uint idx = i*blockSize + j;
             
             // compute key (bucket id)
-            uint key = 0;
-            for (uint k=0; k<numBits; k++) {
-                uint key_bit = (keys[idx] >> (startBit+k)) & 1;
-                key += key_bit*pow(2,k);
-            }
+            uint key = (keys[idx] >> startBit) & mask;
 
             // resolve target_idx, increment
             uint target_idx = blockExScan[i*numBuckets+key] + tmp[key];
@@ -173,7 +172,7 @@ void radixSortParallelPass(
 ) {
     uint numBuckets = 1 << numBits;
 
-    // Choose numBlocks so that numBlocks * blockSize is always greater than keys.size().
+    // choose numBlocks so that numBlocks * blockSize is always greater than keys.size().
     uint numBlocks = (keys.size() + blockSize - 1) / blockSize;
 
     // go over each block and compute its local histogram
@@ -194,6 +193,7 @@ void radixSortParallelPass(
     // populate the sorted vector
     populateOutputFromBlockExScan(blockExScan, numBlocks, numBuckets, startBit,
                                   numBits, blockSize, keys, sorted);
+
 }
 
 int radixSortParallel(
@@ -202,15 +202,20 @@ int radixSortParallel(
     uint numBits, 
     uint numBlocks
 ) {
+    int count = 0;
+    while (keys.size() != numBlocks*(keys.size()/numBlocks)) {
+        keys.push_back(0);
+        count++;
+    }
+
     for (uint startBit = 0; startBit < 32; startBit += 2 * numBits) 
     {
         radixSortParallelPass(keys, keys_tmp, numBits, startBit, keys.size() / numBlocks);
         radixSortParallelPass(keys_tmp, keys, numBits, startBit + numBits, keys.size() / numBlocks);
     }
-
+    keys = std::vector<uint>(keys.begin()+count, keys.end());
     return 0;
 }
-
 
 void runBenchmark(std::vector<uint>& keys_parallel, 
                   std::vector<uint>& temp_keys, 
