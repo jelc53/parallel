@@ -132,7 +132,12 @@ main_q1.cpp:60:main     TEST PASSED.
     \end{verbatim}
 
     \item \textbf{Question 6: Serial vs parallel benchmarking} Use ICME GPU cluster to 
-    compare time estimates for different numbers of threads and blocks. 
+    compare time estimates for different numbers of threads and blocks. In order to get 
+    this coded to run I needed to handle exception case where the number of blocks did 
+    not cleanly divide the number of elements in keys. In these cases, the derived block 
+    size implied we would not sort the end of the keys list. My solution was to pad the 
+    keys list with zeros until it evenly divided the next block number and remove this 
+    number of zero elements after sorting.
 
 \begin{verbatim}
 jelc@icme-gpu:~/cme213-para/hw2$ make
