@@ -183,13 +183,16 @@ Benchmark runs: PASS
     Optimal time of 0.015 seconds achieved at 8 threads / 8 blocks on the icme gpu cluster.
     See benchmark results above.
 
-    In general, our performance improves as we increase number of threads up close to our 
-    hardware limit of 16 cpus per task. Beyond this, we do not have additional cpu cores to 
-    allocate and so just incur extra overhead.
+    In general, our performance improves as we increase number of threads up available to 
+    compute our sorting program in parallel. However, there is a trade-off between extra 
+    parallelization and overhead required to generate and manage threads. For the scenarios
+    we ran, the best performance was typically around 8-16 threads. Also since the icme gpu 
+    cluster allocates a maximum of 16 cpu cores per task, we should expect to hit
+    a hardware limit at 32 threads (2x threads per core). 
     
-    Similarly, for number of blocks the optimal is driven by a tradeoff between increased ability 
-    to parallelize sorting operations and overhead associated with combining sorted blocks. 
-    For the scenarios we ran, the best performance was typically around 8-16 blocks.
+    Similarly, for number of blocks the optimal is driven by a tradeoff between increased 
+    ability to parallelize sorting operations and overhead associated with combining sorted 
+    blocks. For the scenarios we ran, the best performance was typically around 8-16 blocks.
 
 \end{itemize}
 
