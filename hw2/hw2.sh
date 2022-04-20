@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH -o slurm.sh.out
 #SBATCH -p CME
+#SBATCH --cpus-per-task=16
 
 OMP_NUM_THREADS=4
 ### ---------------------------------------

@@ -146,16 +146,15 @@ g++ -std=c++11 -g -Wall -O3 -fopenmp main_q2.cpp -o main_q2
 g++ -std=c++11 -g -Wall -O3 -fopenmp main_q2.cpp -D QUESTION6 -o main_q2_part6
 
 jelc@icme-gpu:~/cme213-para/hw2$ sbatch script.sh 
-Submitted batch job 40975
+Submitted batch job 41096
 
-jelc@icme-gpu:~/cme213-para/hw2$ cat job_40975.out 
-Date				= Thu Apr 14 02:41:05 UTC 2022
+jelc@icme-gpu:~/cme213-para/hw2$ cat job_41096.out 
+Date				= Wed Apr 20 06:31:24 UTC 2022
 Hostname				= icmet01
 Working directory 		= /home/jelc/cme213-para/hw2
 
 Number of nodes allocated		= 1
-Number of tasks allocated		= 
-Number of cores/task allocated 	= 
+Number of cores/task allocated 	= 16
 tests_q2.h:22:Test1	TEST PASSED.
 tests_q2.h:38:Test2	TEST PASSED.
 tests_q2.h:50:Test3	TEST PASSED.
@@ -163,30 +162,35 @@ tests_q2.h:67:Test4	TEST PASSED.
 tests_q2.h:84:Test5	TEST PASSED.
 Serial Radix Sort: PASS
 Parallel Radix Sort: PASS
-stl: 0.311274
-serial radix: 0.0460927
-parallel radix: 0.0596201
+stl: 0.310788
+serial radix: 0.0461267
+parallel radix: 0.031369
 Threads Blocks / Timing
-            1       2       4       8      12      16      24      32      40      48
-    1    0.049   0.050   0.046   0.048   0.059   0.055   0.059   0.068   0.062   0.068
-    2    0.048   0.047   0.049   0.049   0.051   0.053   0.058   0.060   0.061   0.066
-    4    0.045   0.047   0.049   0.048   0.051   0.054   0.058   0.059   0.059   0.063
-    8    0.045   0.047   0.049   0.050   0.051   0.054   0.056   0.060   0.061   0.066
-    12    0.048   0.047   0.049   0.049   0.051   0.056   0.059   0.062   0.061   0.066
-    16    0.048   0.047   0.051   0.050   0.052   0.055   0.060   0.060   0.061   0.068
-    24    0.051   0.048   0.049   0.050   0.052   0.055   0.063   0.065   0.063   0.072
-    32    0.049   0.048   0.050   0.050   0.052   0.055   0.058   0.066   0.065   0.071
-    40    0.048   0.050   0.050   0.050   0.053   0.057   0.065   0.068   0.065   0.075
-    48    0.049   0.049   0.049   0.050   0.053   0.055   0.059   0.068   0.067   0.074
+         1       2       4       8      12      16      24      32      40      48
+   1    0.058   0.052   0.046   0.048   0.059   0.056   0.059   0.068   0.063   0.069
+   2    0.045   0.033   0.038   0.035   0.036   0.043   0.042   0.041   0.057   0.047
+   4    0.050   0.034   0.022   0.022   0.028   0.025   0.030   0.030   0.036   0.036
+   8    0.057   0.031   0.021   0.015   0.019   0.018   0.022   0.022   0.027   0.029
+  12    0.069   0.035   0.026   0.020   0.020   0.024   0.024   0.025   0.028   0.031
+  16    0.070   0.033   0.027   0.020   0.019   0.019   0.026   0.024   0.030   0.031
+  24    0.065   0.043   0.028   0.027   0.023   0.022   0.035   0.031   0.034   0.038
+  32    0.066   0.041   0.034   0.031   0.023   0.023   0.029   0.029   0.033   0.034
+  40    0.064   0.042   0.038   0.029   0.024   0.028   0.030   0.029   0.031   0.036
+  48    0.065   0.036   0.028   0.029   0.025   0.026   0.031   0.029   0.032   0.040
 Benchmark runs: PASS
 \end{verbatim} 
     
-    Optimal speed achieved at 4/8 threads and 1 block.  
+    Optimal time of 0.015 seconds achieved at 8 threads / 8 blocks on the icme gpu cluster.
+    See benchmark results above.
+
+    In general, our performance improves as we increase number of threads up close to our 
+    hardware limit of 16 cpus per task. Beyond this, we do not have additional cpu cores to 
+    allocate and so just incur extra overhead.
     
-    In general, time increases with number of blocks (more subdividing overhead), but goes both 
-    up and down for number of threads (best at 4/8). The thread result in particular was surprising
-    to me since I had expected the parallel program running on a cluster machine to be able to take 
-    advantage of more threads.
+    For number of blocks, the optimal is driven by some combination of dividing complexity 
+    (fewer flops to combine block smaller block histograms than create one huge histogram)
+    and threads available to parallelize block computations. For the scenarios we ran,
+    the best performance was typically around 8-16 blocks.
 
 \end{itemize}
 

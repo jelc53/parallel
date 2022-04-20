@@ -35,9 +35,6 @@ std::vector<uint> computeBlockHistograms(
     // loop through blocks
     for (uint i=0; i<numBlocks; i++) {
 
-        // uint delta = keys.size() - i*blockSize;
-        // uint blockSizeAdj = std::min(blockSize, delta);
-
         // loop through elements of blocks
         for (uint j=0; j<blockSize; j++) {
 
