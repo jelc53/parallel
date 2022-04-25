@@ -1,0 +1,223 @@
+\documentclass[12pt,letterpaper,twoside]{article}
+
+\newif\ifsolution\solutiontrue   % Include the solutions
+%\newif\ifsolution\solutionfalse  % Exclude the solutions
+
+\usepackage{cme213}
+\usepackage{xcolor}
+
+\newcommand{\T}[1]{\text{\texttt{#1}}}
+\newcommand{\V}[1]{\text{\textit{#1}}}
+
+\begin{document}
+
+{\centering \textbf{Homework 3\\ Due Sunday, May 1st via GradeScope\\}}
+\vspace*{-8pt}\noindent\rule{\linewidth}{1pt}
+
+\paragraph{Problem 1: } Implement a parallel function that sums separately the odd
+and even values of a vector. 
+
+Idea: Need to implement \texttt{parallelSum} using \texttt{omp parallel for} with 
+reductions for both even and odd accumulators.
+
+\begin{cpp}
+std::vector<uint> parallelSum(const std::vector<uint> &v) 
+{
+    omp_set_num_threads(4);
+    std::vector<uint> sums(2);
+    uint sum0 = 0; uint sum1 = 0;
+
+    #pragma omp parallel for reduction(+:sum0) reduction(+:sum1)
+    for(uint i=0; i<v.size(); i++) {
+        if (v[i] % 2 == 0) {
+            sum0 += v[i];
+        }
+        else {
+            sum1 += v[i];
+        }
+    }
+    sums[0] = sum0; sums[1] = sum1;
+    return sums;
+}
+\end{cpp}
+
+Console logs from \texttt{main\_q1.cpp}.
+\begin{verbatim}
+$ make main_q1
+g++ -std=c++11 -g -Wall -O3 -fopenmp main_q1.cpp -o main_q1
+
+$ ./main_q1
+Parallel
+Sum Even: 757361650
+Sum Odd: 742539102
+Time: 0.00433168
+Serial
+Sum Even: 757361650
+Sum Odd: 742539102
+Time: 0.106256
+main_q1.cpp:60:main     TEST PASSED.
+\end{verbatim}
+
+
+\paragraph{Problem 2: } Implement Radix Sort algorithm in parallel.
+
+\begin{itemize}
+    \item \textbf{Question 1: computeBlockHistograms()} Idea: using \texttt{openMP}
+    to parallelize computation across "blocks" when creaing local histograms.
+    Code must pass Test1().
+
+    \begin{verbatim}
+    $ make main_q2
+    g++ -std=c++11 -g -Wall -O3 -fopenmp main_q2.cpp -o main_q2
+
+    $ ./main_q2
+    tests_q2.h:22:Test1     TEST PASSED.
+    \end{verbatim}
+
+    \item \textbf{Question 2: reduceLocalHistoToGlobal()} Idea: accumulate values 
+    based on the remainder of the \texttt{index} divided by \texttt{bucketSize}.
+    Code must pass Test2().
+
+    \begin{verbatim}
+    $ make main_q2
+    g++ -std=c++11 -g -Wall -O3 -fopenmp main_q2.cpp -o main_q2
+
+    $ ./main_q2
+    tests_q2.h:38:Test2     TEST PASSED.
+    \end{verbatim}
+
+    \item \textbf{Question 3: scanGlobalHisto()} Idea: implement cumulative sum 
+    using \texttt{std::partial\_sum} standard library function. Note, needed to 
+    adjust \texttt{Output Iterator} and \texttt{Input Iterator} to ensure we 
+    begin at zero and do not inadvertedly overflow.
+
+    \begin{verbatim}
+    $ make main_q2
+    g++ -std=c++11 -g -Wall -O3 -fopenmp main_q2.cpp -o main_q2
+
+    $ ./main_q2
+    tests_q2.h:50:Test3     TEST PASSED.
+    \end{verbatim}
+
+    \item \textbf{Question 4: computeBlockExScanFromGlobalHisto()} Idea: populate first
+    using \texttt{globalHistoScan} and then increment using \texttt{blockHisograms}
+    for subseuqent blocks. This has the effect of splitting the global histogram
+    into blocks need to update our sorting algorithm (next step).
+    
+    \begin{verbatim}
+    $ make main_q2
+    g++ -std=c++11 -g -Wall -O3 -fopenmp main_q2.cpp -o main_q2
+
+    $ ./main_q2
+    tests_q2.h:67:Test4     TEST PASSED.
+    \end{verbatim}
+
+    \item \textbf{Question 5: populateOutputFromBlockExScan()} Idea: use pre-computed
+    \texttt{blockEx Scan} to help target where entries of our unsorted input vector
+    should map to in \texttt{sorted}. We can parallelize this operation by block using 
+    \texttt{openMP}. Note, we still need to re-compute which "bucket" each of our unsorted 
+    entries are from at each step since this information is not stored and passed to the 
+    function. 
+    
+    Also, this step only succeeds in sorting our input up to the \texttt{numBits}'th 
+    bit (in this case 8 bits of sorting per pass). Subsequent "passes" are needed to complete
+    our radix sort algorithm since many input entires are greater than 256 (limit of 8 bits).
+
+    \begin{verbatim}
+    $ make main_q2
+    g++ -std=c++11 -g -Wall -O3 -fopenmp main_q2.cpp -o main_q2
+
+    $ ./main_q2
+    tests_q2.h:84:Test5     TEST PASSED.
+    \end{verbatim}
+
+    \item \textbf{Question 6: Serial vs parallel benchmarking} Use ICME GPU cluster to 
+    compare time estimates for different numbers of threads and blocks. In order to get 
+    this coded to run I needed to handle exception case where the number of blocks did 
+    not cleanly divide the number of elements in keys. In these cases, the derived block 
+    size implied we would not sort the end of the keys list. My solution was to pad the 
+    keys list with zeros until it evenly divided the next block number and remove this 
+    number of zero elements after sorting.
+
+\begin{verbatim}
+jelc@icme-gpu:~/cme213-para/hw2$ make
+g++ -std=c++11 -g -Wall -O3 -fopenmp main_q1.cpp -o main_q1
+g++ -std=c++11 -g -Wall -O3 -fopenmp main_q2.cpp -o main_q2
+g++ -std=c++11 -g -Wall -O3 -fopenmp main_q2.cpp -D QUESTION6 -o main_q2_part6
+
+jelc@icme-gpu:~/cme213-para/hw2$ sbatch script.sh 
+Submitted batch job 41096
+
+jelc@icme-gpu:~/cme213-para/hw2$ cat job_41096.out 
+Date				= Wed Apr 20 06:31:24 UTC 2022
+Hostname				= icmet01
+Working directory 		= /home/jelc/cme213-para/hw2
+
+Number of nodes allocated		= 1
+Number of cores/task allocated 	= 16
+tests_q2.h:22:Test1	TEST PASSED.
+tests_q2.h:38:Test2	TEST PASSED.
+tests_q2.h:50:Test3	TEST PASSED.
+tests_q2.h:67:Test4	TEST PASSED.
+tests_q2.h:84:Test5	TEST PASSED.
+Serial Radix Sort: PASS
+Parallel Radix Sort: PASS
+stl: 0.310788
+serial radix: 0.0461267
+parallel radix: 0.031369
+Threads Blocks / Timing
+         1       2       4       8      12      16      24      32      40      48
+   1    0.058   0.052   0.046   0.048   0.059   0.056   0.059   0.068   0.063   0.069
+   2    0.045   0.033   0.038   0.035   0.036   0.043   0.042   0.041   0.057   0.047
+   4    0.050   0.034   0.022   0.022   0.028   0.025   0.030   0.030   0.036   0.036
+   8    0.057   0.031   0.021   0.015   0.019   0.018   0.022   0.022   0.027   0.029
+  12    0.069   0.035   0.026   0.020   0.020   0.024   0.024   0.025   0.028   0.031
+  16    0.070   0.033   0.027   0.020   0.019   0.019   0.026   0.024   0.030   0.031
+  24    0.065   0.043   0.028   0.027   0.023   0.022   0.035   0.031   0.034   0.038
+  32    0.066   0.041   0.034   0.031   0.023   0.023   0.029   0.029   0.033   0.034
+  40    0.064   0.042   0.038   0.029   0.024   0.028   0.030   0.029   0.031   0.036
+  48    0.065   0.036   0.028   0.029   0.025   0.026   0.031   0.029   0.032   0.040
+Benchmark runs: PASS
+\end{verbatim} 
+    
+    Optimal time of 0.015 seconds achieved at 8 threads / 8 blocks on the icme gpu cluster.
+    See benchmark results above.
+
+    In general, our performance improves as we increase number of threads up available to 
+    compute our sorting program in parallel. However, there is a trade-off between extra 
+    parallelization and overhead required to generate and manage threads. For the scenarios
+    we ran, the best performance was typically around 8-16 threads. Also since the icme gpu 
+    cluster allocates a maximum of 16 cpu cores per task, we should expect to hit
+    a hardware limit at 32 threads (2x threads per core). 
+    
+    Similarly, for number of blocks the optimal is driven by a tradeoff between increased 
+    ability to parallelize sorting operations and overhead associated with combining sorted 
+    blocks. For the scenarios we ran, the best performance was typically around 8-16 blocks.
+
+\end{itemize}
+
+
+Submission information logs.
+\begin{verbatim}
+jelc@cardinal1:~$ /afs/ir.stanford.edu/class/cme213/script/submit.py hw2 private/cme213-jelc53/hw2
+Submission for assignment 'hw2' as user 'jelc'
+Attempt 1/10
+Time stamp: 2022-04-13 20:09
+List of files being copied:
+    private/cme213-jelc53/hw2/sum.h	 [768 bytes]
+    private/cme213-jelc53/hw2/parallel_radix_sort.h	 [7625 bytes]
+
+Your files were copied successfully.
+Directory where files were copied: /afs/ir.stanford.edu/class/cme213/submissions/hw2/jelc/1
+List of files in this directory:
+    sum.h	 [768 bytes]
+    parallel_radix_sort.h	 [7625 bytes]
+    metadata	 [137 bytes]
+
+This completes the submission process. Thank you!
+
+jelc@cardinal1:~$ ls /afs/ir.stanford.edu/class/cme213/submissions/hw2/jelc/1
+metadata  parallel_radix_sort.h  sum.h
+\end{verbatim}
+
+\end{document}
