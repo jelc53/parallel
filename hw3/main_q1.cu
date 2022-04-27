@@ -16,6 +16,7 @@
 #include <iomanip>
 #include <iostream>
 #include <vector>
+#include <random>
 
 #include "util.cuh"
 #include "recurrence.cuh"
@@ -36,10 +37,16 @@ const size_t ITER_MAX_CHECK = 10;
    This is to avoid having to consider the accumulation of roundoff errors.
 */
 
-// TODO: initialize an array of size arr_size in input_array with random floats
+// Initialize an array of size arr_size in input_array with random floats
 // between -1 and 1
 void initialize_array(vec &input_array, size_t arr_size) {
-
+  std::random_device rd;
+  std::mt19937 e2(rd());
+  std::uniform_real_distribution<> dist(-1,1);
+  for(int i=0; i<arr_size; i++){
+    input_array[i] = dist(e2);
+  }  
+  
 }
 
 void host_recurrence(vec &input_array, vec &output_array, size_t num_iter,
@@ -156,6 +163,7 @@ int main(int argc, char **argv) {
   vec init_arr;
   initialize_array(init_arr, MAX_ARR_SIZE);
   check_initialization(init_arr, MAX_ARR_SIZE);
+  cout << "Passed initialization" << endl;
 
   cudaFree(0);  // initialize cuda context to avoid including cost in timings later
 
@@ -164,10 +172,12 @@ int main(int argc, char **argv) {
   // never make a bad memory access, even though we are passing in NULL
   // pointers since we are also passing in a size of 0
   recurrence<<<1, 1>>>(nullptr, nullptr, 0, 0);
+  cout << "Kernel warm-up complete" << end;
 
   // allocate host arrays
   vec arr_gpu(MAX_ARR_SIZE);
   vec arr_host(MAX_ARR_SIZE);
+  cout << "..." << endl;
 
   // Compute the size of the arrays in bytes for memory allocation.
   const size_t num_bytes = MAX_ARR_SIZE * sizeof(elem_type);
@@ -176,8 +186,11 @@ int main(int argc, char **argv) {
   elem_type *device_input_array = nullptr;
   elem_type *device_output_array = nullptr;
 
-  // TODO: allocate num_bytes of memory to the device arrays.
+  // Allocate num_bytes of memory to the device arrays.
   // Hint: use cudaMalloc
+  cudaMalloc(&device_input_array, num_bytes);
+  cudaMalloc(&device_output_array, num_bytes);
+  cout << "Allocating memory for io arrays" << endl;
 
   // if either memory allocation failed, report an error message
   if (!device_input_array || !device_output_array) {
@@ -308,8 +321,9 @@ int main(int argc, char **argv) {
   cout << endl;
   performance_array.clear();
 
-  // TODO: deallocate memory from both device arrays
-
+  // Deallocate memory from both device arrays
+  cudaFree(device_input_array);
+  cudaFree(device_output_array);
 
   return exit_code;
 }
