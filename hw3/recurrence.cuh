@@ -15,21 +15,44 @@
 typedef float elem_type;
 
 /**
- * TODO: implement the kernel recurrence.
+ * Implement the kernel recurrence.
  * The CPU implementation is in host_recurrence() in main_q1.cu.
  */
 __global__ void recurrence(const elem_type* input_array,
-                           elem_type* output_array, size_t num_iter,
+                           elem_type* output_array, 
+			   size_t num_iter,
                            size_t array_length) {
 
+  for (int xid = blockIdx.x * blockDim.x + threadIdx.x;
+       xid < array_length;
+       xid += blockDim.x * gridDim.x) {
+  
+    elem_type z = 0;
+    elem_type constant = input_array[xid];
+
+    int it=0;
+    while(it<num_iter) {
+      z = z * z + constant;
+      it++;
+    }
+    output_array[xid] = z;
+  }
 }
 
-double doGPURecurrence(const elem_type* d_input, elem_type* d_output,
-                       size_t num_iter, size_t array_length, size_t block_size,
+double doGPURecurrence(const elem_type* d_input, 
+		       elem_type* d_output,
+                       size_t num_iter, 
+		       size_t array_length, 
+		       size_t block_size,
                        size_t grid_size) {
   event_pair timer;
   start_timer(&timer);
-  // TODO: launch kernel
+
+  // Launch kernel
+  recurrence<<<grid_size, block_size>>>(d_input, 
+		                                    d_output, 
+		                                    num_iter, 
+					                              array_length);
 
   check_launch("gpu recurrence");
   return stop_timer(&timer);

@@ -16,7 +16,6 @@
 #include <iomanip>
 #include <iostream>
 #include <vector>
-#include <random>
 
 #include "util.cuh"
 #include "recurrence.cuh"
@@ -30,7 +29,7 @@ using std::vector;
 typedef float elem_type;
 typedef std::vector<elem_type> vec;
 
-constexpr const size_t MAX_ARR_SIZE = (1 << 30);  // NOTE: change this to 100 for debugging
+constexpr const size_t MAX_ARR_SIZE = (1 << 30);  // NOTE: change to 100 for debugging
 
 const size_t ITER_MAX_CHECK = 10; 
 /* Maximum number of iterations for which error is checked;
@@ -40,11 +39,11 @@ const size_t ITER_MAX_CHECK = 10;
 // Initialize an array of size arr_size in input_array with random floats
 // between -1 and 1
 void initialize_array(vec &input_array, size_t arr_size) {
-  std::random_device rd;
-  std::mt19937 e2(rd());
-  std::uniform_real_distribution<> dist(-1,1);
+  input_array.resize(arr_size);
+  std::generate(input_array.begin(), input_array.end(), rand);
+
   for(int i=0; i<arr_size; i++){
-    input_array[i] = dist(e2);
+    input_array[i] = static_cast<float>(input_array[i])/(RAND_MAX/2)-1;
   }  
   
 }
@@ -156,6 +155,33 @@ double recurAndCheck(const elem_type *device_input_array,
   return elapsed_time;
 }
 
+void writeToCSV(std::string filename, 
+		std::vector<std::pair<std::string, std::vector<float>>> data) {
+  // create output filestream object
+  std::ofstream myFile(filename);
+
+  // send column names to stream
+  for (int j=0; j<data.size(); ++j){
+    myFile << data.at(j).first;
+    if (j != data.size() -1){
+      myFile << ","; // no comma at end of line
+    }
+  }
+  myFile << "\n";
+
+  // send data to stream
+  for (int i=0; i<data.at(0).second.size(); ++i) {
+    for (int j=0; j<data.size(); ++j) {
+      myFile << data.at(j).second.at(i);
+      if (j != data.size() -1) {
+        myFile << ",";  // no comma at end of line
+      }
+    }
+    myFile << "\n";
+  }
+  myFile.close();
+}
+
 int main(int argc, char **argv) {
   int exit_code = 0;
 
@@ -163,7 +189,7 @@ int main(int argc, char **argv) {
   vec init_arr;
   initialize_array(init_arr, MAX_ARR_SIZE);
   check_initialization(init_arr, MAX_ARR_SIZE);
-  cout << "Passed initialization" << endl;
+  cout << "Passed initialization..." << endl;
 
   cudaFree(0);  // initialize cuda context to avoid including cost in timings later
 
@@ -172,12 +198,12 @@ int main(int argc, char **argv) {
   // never make a bad memory access, even though we are passing in NULL
   // pointers since we are also passing in a size of 0
   recurrence<<<1, 1>>>(nullptr, nullptr, 0, 0);
-  cout << "Kernel warm-up complete" << end;
+  cout << "Kernel warm-up complete..." << endl;
 
   // allocate host arrays
   vec arr_gpu(MAX_ARR_SIZE);
   vec arr_host(MAX_ARR_SIZE);
-  cout << "..." << endl;
+  cout << "Allocated memory on host ..." << endl;
 
   // Compute the size of the arrays in bytes for memory allocation.
   const size_t num_bytes = MAX_ARR_SIZE * sizeof(elem_type);
@@ -185,12 +211,13 @@ int main(int argc, char **argv) {
   // pointers to device arrays
   elem_type *device_input_array = nullptr;
   elem_type *device_output_array = nullptr;
+  cout << "Created GPU arrays ..." << endl;
 
   // Allocate num_bytes of memory to the device arrays.
   // Hint: use cudaMalloc
   cudaMalloc(&device_input_array, num_bytes);
   cudaMalloc(&device_output_array, num_bytes);
-  cout << "Allocating memory for io arrays" << endl;
+  cout << "Allocated memory on device!" << endl;
 
   // if either memory allocation failed, report an error message
   if (!device_input_array || !device_output_array) {
@@ -234,7 +261,8 @@ int main(int argc, char **argv) {
   // You can make the graph more easily by saving this array as a csv (or
   // something else)
   std::vector<double> performance_array;
-
+  std::vector<std::pair<std::string, std::vector<float>>> csv_out1, csv_out2, csv_out3;
+  
   /*
    * ––––––––––-------------------------------------------------------
    * Question 1.4: vary number of threads for a small number of blocks
@@ -256,11 +284,13 @@ int main(int argc, char **argv) {
                       array_size, cuda_block_size, cuda_grid_size, arr_host);
     double performance = flops / (elapsed_time / 1000.) / 1E12;
     performance_array.push_back(performance);
+    label_array.push_back(cuda_block_size);
     cout << std::setw(17) << cuda_block_size;
     cout << std::setw(25) << performance << endl;
     ;
   }
   cout << endl;
+  // csv ... 
   performance_array.clear();
 
   /*
