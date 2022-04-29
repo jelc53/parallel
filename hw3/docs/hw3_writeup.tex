@@ -5,6 +5,7 @@
 
 \usepackage{cme213}
 \usepackage{xcolor}
+\usepackage{graphicx}
 
 \newcommand{\T}[1]{\text{\texttt{#1}}}
 \newcommand{\V}[1]{\text{\textit{#1}}}
@@ -48,7 +49,8 @@ different starting points.
           std::generate(input_array.begin(), input_array.end(), rand);
         
           for(int i=0; i<arr_size; i++){
-            input_array[i] = static_cast<float>(input_array[i])/(RAND_MAX/2)-1;
+            input_array[i] = static_cast<float>(input_array[i])/
+                                (RAND_MAX/2)-1;
           }    
         }
     \end{cpp}
@@ -91,140 +93,73 @@ different starting points.
     \end{cpp}
     
     Console logs.
-    \begin{verbatim}
-    Starting at Fri Apr 29 00:28:45 UTC 2022
+\begin{verbatim}
+Starting at Fri Apr 29 00:28:45 UTC 2022
 
-    nvcc -O3 -std=c++11 -arch=compute_75 -code=sm_75 -o main_q1 main_q1.cu
+nvcc -O3 -std=c++11 -arch=compute_75 -code=sm_75 -o main_q1 main_q1.cu
 
-    Output from main_q1
-    ----------------
-    Largest error found at pos: 15 error 7.81565e-08 expected 1.52526 and got 1.52526
-    Largest error found at pos: 0 error 0 expected 0.680375 and got 0.680375
-    Largest error found at pos: 439038 error 1.19193e-07 expected 1.00014 and got 1.00014
-    Largest error found at pos: 142710 error 2.38333e-07 expected 2.00072 and got 2.00072
-    Largest error found at pos: 482709 error 5.61004e-07 expected 16.9994 and got 16.9994
-    Largest error found at pos: 482709 error 1.15797e-06 expected 289.897 and got 289.898
-    Largest error found at pos: 482709 error 2.324e-06 expected 84041.4 and got 84041.6
-    Largest error found at pos: 482709 error 4.63941e-06 expected 7.06296e+09 and got 7.063e+09
-    Largest error found at pos: 482709 error 9.25711e-06 expected 4.98854e+19 and got 4.98859e+19
-    Largest error found at pos: 138972 error 1.79297e-05 expected 8.03779e+21 and got 8.03765e+21
-    Largest error found at pos: 905817 error 2.59306e-05 expected 1.66519e+35 and got 1.66523e+35
+Output from main_q1
+----------------
+Largest error found at pos: 15 error 7.81565e-08 
+    expected 1.52526 and got 1.52526
 
-    Questions 1.1-1.3: your code passed all the tests!
+Largest error found at pos: 0 error 0 
+    expected 0.680375 and got 0.680375
 
-                    Q1.4
-    ------------------------------------------ 
-    Number of Threads   Performance TFlops/sec
-                   32                 0.843698
-                   64                  1.71319
-                   96                   2.5743
-                  128                  3.42082
-                  160                   4.4214
-                  192                  5.79964
-                  224                   6.8216
-                  256                  7.70162
-                  288                  8.27133
-                  320                  9.18469
-                  352                  10.0615
-                  384                  10.7552
-                  416                   10.529
-                  448                  11.2155
-                  480                  11.9355
-                  512                  12.3663
-                  544                  11.3325
-                  576                  11.5058
-                  608                  12.4919
-                  640                  13.0052
-                  672                  11.5092
-                  704                   12.075
-                  736                   12.695
-                  768                  12.7192
-                  800                  11.7815
-                  832                  12.4544
-                  864                  12.4641
-                  896                  13.1923
-                  928                  12.4277
-                  960                  12.2472
-                  992                  12.8563
-                 1024                  13.0942
+Largest error found at pos: 439038 error 1.19193e-07 
+    expected 1.00014 and got 1.00014
 
-                    Q1.5
-    ------------------------------------------ 
-    Number of Blocks   Performance TFlops/sec
-                  36                  1.68669
-                  72                  3.35125
-                 108                  4.43883
-                 144                  5.86105
-                 180                   6.8456
-                 216                   8.1191
-                 252                  8.12224
-                 288                  9.39581
-                 324                  7.71112
-                 360                  8.63641
-                 396                  8.93084
-                 432                  9.58119
-                 468                  9.36923
-                 504                   9.9853
-                 540                  9.35853
-                 576                  9.94791
-                 612                  9.56487
-                 648                  9.41304
-                 684                  9.93957
-                 720                  10.5008
-                 756                  10.0355
-                 792                  10.6237
-                 828                  10.1014
-                 864                  11.9466
-                 900                   12.516
-                 936                   12.909
-                 972                  12.8201
-                1008                  12.9218
-                1044                  12.5967
-                1080                  12.8112
-                1116                  12.4403
-                1152                  12.7656
+Largest error found at pos: 142710 error 2.38333e-07 
+    expected 2.00072 and got 2.00072
 
-                    Q1.6
-    ------------------------------------------ 
-    Number of Iters   Performance TFlops/sec
-                 20                  1.54131
-                 40                  3.29381
-                 60                  4.80154
-                 80                  5.64972
-                100                  6.20655
-                120                  7.32422
-                140                  5.63426
-                160                  8.15661
-                180                   8.3581
-                200                  8.83392
-                300                  6.81323
-                400                  8.40619
-                500                  8.00461
-                600                  8.20031
-                700                  8.46228
-                800                  8.77809
-                900                  9.48087
-               1000                  9.32557
-               1200                  9.32836
-               1400                  9.49436
-               1600                  9.68148
-               1800                  9.66993
-               2000                  9.91434
-               2200                  9.97533
-               2400                  10.0087
-               2600                  10.1537
-               2800                   10.083
-               3000                  10.2325
-    \end{verbatim}
+Largest error found at pos: 482709 error 5.61004e-07 
+    expected 16.9994 and got 16.9994
+
+Largest error found at pos: 482709 error 1.15797e-06 
+    expected 289.897 and got 289.898
+
+Largest error found at pos: 482709 error 2.324e-06 
+    expected 84041.4 and got 84041.6
+
+Largest error found at pos: 482709 error 4.63941e-06 
+    expected 7.06296e+09 and got 7.063e+09
+
+Largest error found at pos: 482709 error 9.25711e-06 
+    expected 4.98854e+19 and got 4.98859e+19
+
+Largest error found at pos: 138972 error 1.79297e-05 
+    expected 8.03779e+21 and got 8.03765e+21
+
+Largest error found at pos: 905817 error 2.59306e-05 
+    expected 1.66519e+35 and got 1.66523e+35
+
+Questions 1.1-1.3: your code passed all the tests!
+\end{verbatim}
 
     \item \textbf{1.4 Vary number of threads per block} ... 
     Many threads concurrently trying to access cache (traffic)
 
-    [Insert graph]
+    \begin{figure}[h]
+        \center
+        \includegraphics[scale=0.7]{q1_4.png}
+        \caption{Performance as we vary number of threads per block}
+    \end{figure}
 
     \item \textbf{1.5 Vary number of blocks}
 
+    \begin{figure}[h]
+        \center
+        \includegraphics[scale=0.7]{q1_5.png}
+        \caption{Performance as we vary number of blocks}
+    \end{figure}
+
     \item \textbf{1.6 Vary number of iterations}
+
+    \begin{figure}[h]
+        \center
+        \includegraphics[scale=0.7]{q1_6.png}
+        \caption{Performance as we vary number of iterations}
+    \end{figure}
     
 \end{itemize}
 
