@@ -50,9 +50,9 @@ double doGPURecurrence(const elem_type* d_input,
 
   // Launch kernel
   recurrence<<<grid_size, block_size>>>(d_input, 
-		                                    d_output, 
-		                                    num_iter, 
-					                              array_length);
+		                        d_output, 
+		                        num_iter, 
+					array_length);
 
   check_launch("gpu recurrence");
   return stop_timer(&timer);

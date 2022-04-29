@@ -16,6 +16,8 @@
 #include <iomanip>
 #include <iostream>
 #include <vector>
+#include <string>
+#include <utility>
 
 #include "util.cuh"
 #include "recurrence.cuh"
@@ -156,7 +158,7 @@ double recurAndCheck(const elem_type *device_input_array,
 }
 
 void writeToCSV(std::string filename, 
-		std::vector<std::pair<std::string, std::vector<float>>> data) {
+		std::vector<std::pair<std::string, std::vector<double>>> data) {
   // create output filestream object
   std::ofstream myFile(filename);
 
@@ -260,8 +262,8 @@ int main(int argc, char **argv) {
 
   // You can make the graph more easily by saving this array as a csv (or
   // something else)
+  std::vector<double> variable_array;
   std::vector<double> performance_array;
-  std::vector<std::pair<std::string, std::vector<float>>> csv_out1, csv_out2, csv_out3;
   
   /*
    * ––––––––––-------------------------------------------------------
@@ -284,13 +286,20 @@ int main(int argc, char **argv) {
                       array_size, cuda_block_size, cuda_grid_size, arr_host);
     double performance = flops / (elapsed_time / 1000.) / 1E12;
     performance_array.push_back(performance);
-    label_array.push_back(cuda_block_size);
+    variable_array.push_back((double)cuda_block_size);
     cout << std::setw(17) << cuda_block_size;
     cout << std::setw(25) << performance << endl;
     ;
   }
   cout << endl;
-  // csv ... 
+  
+  // write results to csv 
+  std::vector<std::pair<std::string, std::vector<double>>> csv_out1 = {
+  	  {"threads_per_block", variable_array}, 
+  	  {"tflops_per_sec", performance_array},
+  };
+  writeToCSV("q1_4.csv", csv_out1);
+  variable_array.clear();
   performance_array.clear();
 
   /*
@@ -314,12 +323,21 @@ int main(int argc, char **argv) {
                       array_size, cuda_block_size, cuda_grid_size, arr_host);
     double performance = flops / (elapsed_time / 1000.) / 1E12;
     performance_array.push_back(performance);
+    variable_array.push_back((double)cuda_grid_size);
     cout << std::setw(16) << cuda_grid_size;
     cout << std::setw(25) << performance << endl;
     ;
   }
   cout << endl;
+  
+  // write results to csv 
+  std::vector<std::pair<std::string, std::vector<double>>> csv_out2 = {
+  	  {"num_blocks", variable_array}, 
+  	  {"tflops_per_sec", performance_array},
+  };
+  writeToCSV("q1_5.csv", csv_out2);
   performance_array.clear();
+  variable_array.clear();
 
   /*
    * ––––––––––-----------------------------
@@ -345,11 +363,20 @@ int main(int argc, char **argv) {
                       array_size, cuda_block_size, cuda_grid_size, arr_host);
     double performance = flops / (elapsed_time / 1000.) / 1E12;
     performance_array.push_back(performance);
+    variable_array.push_back((double)num_iter);
     cout << std::setw(15) << num_iter;
     cout << std::setw(25) << performance << endl;
   }
   cout << endl;
+  
+  // write results to csv 
+  std::vector<std::pair<std::string, std::vector<double>>> csv_out3 = {
+  	  {"num_iterations", variable_array}, 
+  	  {"tflops_per_sec", performance_array},
+  };
+  writeToCSV("q1_6.csv", csv_out3);
   performance_array.clear();
+  variable_array.clear();
 
   // Deallocate memory from both device arrays
   cudaFree(device_input_array);

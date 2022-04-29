@@ -136,16 +136,28 @@ Largest error found at pos: 905817 error 2.59306e-05
 Questions 1.1-1.3: your code passed all the tests!
 \end{verbatim}
 
-    \item \textbf{1.4 Vary number of threads per block} ... 
-    Many threads concurrently trying to access cache (traffic)
-
+    \item \textbf{1.4 Vary number of threads per block} When we 
+    vary number of threads per block while holding number of 
+    iterations (40,000), array size (1e6) and grid size (72) 
+    constant, we get the plot shown below. 
+    
     \begin{figure}[h]
         \center
         \includegraphics[scale=0.7]{q1_4.png}
         \caption{Performance as we vary number of threads per block}
     \end{figure}
 
-    \item \textbf{1.5 Vary number of blocks}
+    Performance improves roughly linearly with threads per block 
+    for the first ~400 threads, after which we get asymptotic 
+    behaviour and a saw-tooth pattern. This is because we reach 
+    the point where the overhead incurred from additional threads
+    starts to dominate performance benefit of computing incremental 
+    recurrence relations in parallel.
+
+    \item \textbf{1.5 Vary number of blocks} When we 
+    vary number of blocks (grid size) while holding number of 
+    iterations (40,000), array size (1e6) and threads per block 
+    (128) constant, we get the plot shown below. 
 
     \begin{figure}[h]
         \center
@@ -153,13 +165,33 @@ Questions 1.1-1.3: your code passed all the tests!
         \caption{Performance as we vary number of blocks}
     \end{figure}
 
-    \item \textbf{1.6 Vary number of iterations}
+    Performance improves roughly linearly with number of blocks 
+    for the first ~200 blocks, after which we get asymptotic 
+    behaviour and a saw-tooth pattern. Similar to q1.4, this is 
+    because we reach the point where the overhead incurred from 
+    additional blocks starts to dominate performance benefit of 
+    computing incremental recurrence relations in parallel.
 
+    \item \textbf{1.6 Vary number of iterations} When we 
+    vary number of iterations while holding number of threads 
+    per block (256), number of blocks (576) and array size (1e6) 
+    constant, we get the plot shown below. 
+    
     \begin{figure}[h]
         \center
         \includegraphics[scale=0.7]{q1_6.png}
         \caption{Performance as we vary number of iterations}
     \end{figure}
+
+    Performance jumps quickly to ~7 Tflops per second as we increase
+    number of iterations from 20-120, after which we get asymptotic 
+    behaviour and a saw-tooth pattern. Iteratiions are done sequentially
+    and so a higher number of iterations means that each thread takes 
+    longer to complete its task before reassigned. This initially means
+    that we reduce overhead of assigning threads per iterations, but 
+    eventually we are working with tasks that are too big to spread
+    evenly across threads (i.e. last thread running has a large portion
+    of its task still to complete).
     
 \end{itemize}
 

@@ -1,6 +1,7 @@
 #ifndef _PAGERANK_CUH
 #define _PAGERANK_CUH
 
+#include <iostream>
 #include "util.cuh"
 
 /* 
@@ -18,7 +19,18 @@ __global__ void device_graph_propagate(
     const float *inv_edges_per_node,
     int num_nodes
 ) {
-    // TODO: fill in the kernel code here
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+         i < num_nodes;
+	 i += blockDim.x * gridDim.x) 
+    {
+      float sum = 0.f;    
+
+      for (int j = graph_indices[i]; j < graph_indices[i+1]; j++) 
+      {
+        sum += graph_nodes_in[graph_edges[j]] * inv_edges_per_node[graph_edges[j]];
+      }
+      graph_nodes_out[i] = 0.5f / (float)num_nodes + 0.5f * sum;
+    }
 }
 
 /* 
@@ -60,27 +72,107 @@ double device_graph_iterate(
     int num_nodes,
     int avg_edges
 ) {
-    // TODO: allocate GPU memory
+    // Allocate GPU memory
+    //std::cout << "Allocating gpu memory ..." << std::endl;
+    
+    // .. pointers to device arrays
+    uint *d_graph_indices = nullptr;
+    uint *d_graph_edges = nullptr;
+    float *d_node_values_input = nullptr;
+    float *d_gpu_node_values_output = nullptr;
+    float *d_inv_edges_per_node = nullptr;
 
-    // TODO: check for allocation failure
+    // .. allocate cuda memory
+    cudaMalloc(&d_graph_indices, sizeof(int)*(num_nodes+1));
+    cudaMalloc(&d_graph_edges, sizeof(int)*num_nodes*avg_edges);
+    cudaMalloc(&d_node_values_input, sizeof(float)*num_nodes);
+    cudaMalloc(&d_gpu_node_values_output, sizeof(float)*num_nodes);
+    cudaMalloc(&d_inv_edges_per_node, sizeof(float)*num_nodes);
 
-    // TODO: copy data to the GPU
+    // Check for allocation failure
+    // Idea: pointers stay nullptr after allocation
+    if (d_graph_indices == nullptr | 
+        d_graph_edges == nullptr |
+	d_node_values_input == nullptr |
+	d_gpu_node_values_output == nullptr |
+	d_inv_edges_per_node == nullptr) {
 
+      std::cerr << "Device memory allocation failure!" << std::endl;
+    }
+    //std::cout << "GPU memory successfully allocated!" << std::endl;
+
+    // Copy data to the GPU
+    //std::cout << "Copying data to gpu ..." << std::endl;
+    cudaMemcpy(d_graph_indices, 
+	       &h_graph_indices[0], 
+	       sizeof(int)*(num_nodes+1), 
+	       cudaMemcpyHostToDevice);
+
+    cudaMemcpy(d_graph_edges, 
+	       &h_graph_edges[0], 
+	       sizeof(int)*num_nodes*avg_edges, 
+	       cudaMemcpyHostToDevice);
+    
+    cudaMemcpy(d_node_values_input, 
+	       &h_node_values_input[0], 
+	       sizeof(float)*num_nodes, 
+	       cudaMemcpyHostToDevice);
+    
+    cudaMemcpy(d_gpu_node_values_output, 
+	       &h_gpu_node_values_output[0], 
+	       sizeof(float)*num_nodes, 
+	       cudaMemcpyHostToDevice);
+    
+    cudaMemcpy(d_inv_edges_per_node, 
+	       &h_inv_edges_per_node[0], 
+	       sizeof(float)*num_nodes, 
+	       cudaMemcpyHostToDevice);
+    
     // launch kernels
     event_pair timer;
     start_timer(&timer);
 
     const int block_size = 192;
+    const int grid_size = num_nodes; // our hardware limits far exceed num_nodes 
 
-    // TODO: launch your kernels the appropriate number of iterations
-
+    // Launch your kernels the appropriate number of iterations
+    //std::cout << "Launching propagtion kernel ... " << std::endl;
+    for (int it = 0; it < nr_iterations; it++) {
+      if (it == 0)
+      {
+        device_graph_propagate<<<grid_size, block_size>>>(d_graph_indices,
+		                                          d_graph_edges,
+		    					  d_node_values_input, 
+							  d_gpu_node_values_output,
+							  d_inv_edges_per_node,
+							  num_nodes);
+      }
+      else 
+      {
+        device_graph_propagate<<<grid_size, block_size>>>(d_graph_indices,
+	  	                                          d_graph_edges,
+							  d_gpu_node_values_output, 
+							  d_gpu_node_values_output,
+							  d_inv_edges_per_node,
+							  num_nodes);
+      }
+    }
+    
     check_launch("gpu graph propagate");
     double gpu_elapsed_time = stop_timer(&timer);
 
-    // TODO: copy final data back to the host for correctness checking
+    // Copy final data back to the host for correctness checking
+    cudaMemcpy(&h_gpu_node_values_output[0], 
+	       d_gpu_node_values_output, 
+	       sizeof(int)*num_nodes, 
+	       cudaMemcpyDeviceToHost);
 
-    // TODO: free the memory you allocated!
-
+    // Free the memory you allocated!
+    cudaFree(d_graph_indices);
+    cudaFree(d_graph_edges);
+    cudaFree(d_node_values_input);
+    cudaFree(d_gpu_node_values_output);
+    cudaFree(d_inv_edges_per_node);
 
     return gpu_elapsed_time;
 }
@@ -100,8 +192,13 @@ double device_graph_iterate(
  */
 uint get_total_bytes(uint nodes, uint edges, uint iterations)
 {
-    // TODO
-    return 0;
+    int nbyte_idx = sizeof(int) * (nodes+1);
+    int nbyte_edg = sizeof(int) * edges;
+    int nbyte_in = sizeof(float) * nodes;
+    int nbyte_out = sizeof(float) * nodes;
+    int nbyte_epn = sizeof(float) * nodes;
+    // ((nodes * edges) + nodes + 1) * iterations * sizeof(int)
+    return iterations * (nbyte_idx + nbyte_edg + nbyte_in + nbyte_out + nbyte_epn);
 }
 
 #endif
