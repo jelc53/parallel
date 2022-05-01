@@ -19,16 +19,15 @@ __global__ void device_graph_propagate(
     const float *inv_edges_per_node,
     int num_nodes
 ) {
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-         i < num_nodes;
-	 i += blockDim.x * gridDim.x) 
-    {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if(i < num_nodes) {
       float sum = 0.f;    
 
       for (int j = graph_indices[i]; j < graph_indices[i+1]; j++) 
       {
         sum += graph_nodes_in[graph_edges[j]] * inv_edges_per_node[graph_edges[j]];
       }
+
       graph_nodes_out[i] = 0.5f / (float)num_nodes + 0.5f * sum;
     }
 }
@@ -68,9 +67,9 @@ double device_graph_iterate(
     const float *h_node_values_input,
     float *h_gpu_node_values_output,
     const float *h_inv_edges_per_node,
-    int nr_iterations,
-    int num_nodes,
-    int avg_edges
+    int nr_iterations,                  // pass directly to register
+    int num_nodes,                      // pass directly to register
+    int avg_edges                       // pass directly to register
 ) {
     // Allocate GPU memory
     //std::cout << "Allocating gpu memory ..." << std::endl;
@@ -91,13 +90,14 @@ double device_graph_iterate(
 
     // Check for allocation failure
     // Idea: pointers stay nullptr after allocation
-    if (d_graph_indices == nullptr | 
-        d_graph_edges == nullptr |
-	d_node_values_input == nullptr |
-	d_gpu_node_values_output == nullptr |
+    if (d_graph_indices == nullptr || 
+        d_graph_edges == nullptr ||
+	d_node_values_input == nullptr ||
+	d_gpu_node_values_output == nullptr ||
 	d_inv_edges_per_node == nullptr) {
 
       std::cerr << "Device memory allocation failure!" << std::endl;
+      return 1;
     }
     //std::cout << "GPU memory successfully allocated!" << std::endl;
 
@@ -133,29 +133,20 @@ double device_graph_iterate(
     start_timer(&timer);
 
     const int block_size = 192;
-    const int grid_size = num_nodes; // our hardware limits far exceed num_nodes 
+    const int grid_size = (num_nodes+block_size-1)/block_size; 
 
     // Launch your kernels the appropriate number of iterations
     //std::cout << "Launching propagtion kernel ... " << std::endl;
     for (int it = 0; it < nr_iterations; it++) {
-      if (it == 0)
-      {
-        device_graph_propagate<<<grid_size, block_size>>>(d_graph_indices,
-		                                          d_graph_edges,
-		    					  d_node_values_input, 
-							  d_gpu_node_values_output,
-							  d_inv_edges_per_node,
-							  num_nodes);
-      }
-      else 
-      {
-        device_graph_propagate<<<grid_size, block_size>>>(d_graph_indices,
-	  	                                          d_graph_edges,
-							  d_gpu_node_values_output, 
-							  d_gpu_node_values_output,
-							  d_inv_edges_per_node,
-							  num_nodes);
-      }
+      device_graph_propagate<<<grid_size, block_size>>>(d_graph_indices,
+                                                        d_graph_edges,
+		    					d_node_values_input, 
+							d_gpu_node_values_output,
+							d_inv_edges_per_node,
+							num_nodes);
+      float* temp = d_node_values_input;
+      d_node_values_input = d_gpu_node_values_output;
+      d_gpu_node_values_output = temp;
     }
     
     check_launch("gpu graph propagate");
@@ -163,7 +154,7 @@ double device_graph_iterate(
 
     // Copy final data back to the host for correctness checking
     cudaMemcpy(&h_gpu_node_values_output[0], 
-	       d_gpu_node_values_output, 
+	       d_node_values_input, 
 	       sizeof(int)*num_nodes, 
 	       cudaMemcpyDeviceToHost);
 
@@ -192,13 +183,8 @@ double device_graph_iterate(
  */
 uint get_total_bytes(uint nodes, uint edges, uint iterations)
 {
-    int nbyte_idx = sizeof(int) * (nodes+1);
-    int nbyte_edg = sizeof(int) * edges;
-    int nbyte_in = sizeof(float) * nodes;
-    int nbyte_out = sizeof(float) * nodes;
-    int nbyte_epn = sizeof(float) * nodes;
-    // ((nodes * edges) + nodes + 1) * iterations * sizeof(int)
-    return iterations * (nbyte_idx + nbyte_edg + nbyte_in + nbyte_out + nbyte_epn);
+    int subtotal = sizeof(int)*(2+1*edges) + sizeof(float)*(1+2*edges);
+    return iterations * nodes * subtotal;
 }
 
 #endif

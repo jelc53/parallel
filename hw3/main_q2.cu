@@ -13,8 +13,11 @@
 #include <iomanip>
 #include <cassert>
 #include <ctime>
+#include <fstream>
 #include <limits>
 #include <vector>
+#include <string>
+#include <utility>
 
 #include "util.cuh"
 #include "pagerank.cuh"
@@ -26,7 +29,7 @@ typedef unsigned int uint;
 // amount of floating point numbers between answer and computed value
 // for the answer to be taken correctly. 2's complement magick.
 constexpr int MAX_ULPS = 100;
-constexpr int NUM_ITERATIONS = 6; 
+constexpr int NUM_ITERATIONS = 1; 
 
 
 void host_graph_propagate(
@@ -180,6 +183,34 @@ void checkErrors(
     }
 }
 
+void writeToCSV(std::string filename, 
+		std::vector<std::pair<std::string, std::vector<double>>> data) {
+  // create output filestream object
+  std::ofstream myFile(filename);
+
+  // send column names to stream
+  for (int j=0; j<data.size(); ++j){
+    myFile << data.at(j).first;
+    if (j != data.size() -1){
+      myFile << ","; // no comma at end of line
+    }
+  }
+  myFile << "\n";
+
+  // send data to stream
+  for (int i=0; i<data.at(0).second.size(); ++i) {
+    for (int j=0; j<data.size(); ++j) {
+      myFile << data.at(j).second.at(i);
+      if (j != data.size() -1) {
+        myFile << ",";  // no comma at end of line
+      }
+    }
+    myFile << "\n";
+  }
+  myFile.close();
+}
+
+
 int main() 
 {
     // initalize CUDA and warmup kernel to avoid including these costs in the timings
@@ -219,11 +250,13 @@ int main()
     
     std::cout << std::setw(16) << "Avg. no. edges\n";
 
+    std::vector<double> variable_array;
+    std::vector<double> performance_array;
     for (const uint edge : avg_edges)
     {
         std::cout << std::setw(15) << edge;
-
-        for (const uint node : num_nodes)
+        
+	for (const uint node : num_nodes)
         {
             generateGraph(node, edge, h_graph_indices, h_graph_edges,
                 h_inv_edges_per_node, h_node_values_input,
@@ -257,12 +290,27 @@ int main()
             uint totalBytes = get_total_bytes(node, edge, NUM_ITERATIONS); 
             std::cout << std::setw(15) << std::fixed 
                       << std::setprecision(2) 
-                      << totalBytes / (gpu_time / 1000.) / 1E9 
+                      << totalBytes / (gpu_time / 1000.) / 1E9
                       << std::flush;
+
+	    // populate output vectors
+	    if (edge == 10) {
+	      variable_array.push_back(node);
+	      performance_array.push_back(totalBytes / (gpu_time / 1000.)/1E9);
+	    }
         }
 
         std::cout << std::endl;
     }
+
+    // write results to csv
+    std::vector<std::pair<std::string, std::vector<double>>> csv_out = {
+	    {"num_nodes", variable_array}, 
+	    {"device_bandwidth_gbps", performance_array}
+    };
+    writeToCSV("q2_2.csv", csv_out);
+    performance_array.clear();
+    variable_array.clear();
 
     return 0;
 }

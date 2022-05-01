@@ -17,9 +17,9 @@ def main():
 
 if __name__ == '__main__':
     
-    if len(sys.argv) < 3:
+    if len(sys.argv) < 2:
         print('Usage:')
-        print('  python3 {} < infile name > < outfile name'.format(
+        print('  python3 {} < infile name >'.format(
             sys.argv[0]))
         sys.exit(0)
 
