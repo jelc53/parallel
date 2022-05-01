@@ -1,7 +1,11 @@
 #include <cuda_runtime.h>
 
 #include <iostream>
+#include <fstream>
+#include <vector>
 #include <stdexcept>
+#include <string>
+#include <utility>
 
 #include "util.cuh"
 #include "benchmark.cuh"
@@ -28,6 +32,33 @@ void checkErrors(int *z, unsigned int stride, unsigned int N) {
       }
     }
   }
+}
+
+void writeToCSV(std::string filename, 
+		std::vector<std::pair<std::string, std::vector<double>>> data) {
+  // create output filestream object
+  std::ofstream myFile(filename);
+
+  // send column names to stream
+  for (int j=0; j<data.size(); ++j){
+    myFile << data.at(j).first;
+    if (j != data.size() -1){
+      myFile << ","; // no comma at end of line
+    }
+  }
+  myFile << "\n";
+
+  // send data to stream
+  for (int i=0; i<data.at(0).second.size(); ++i) {
+    for (int j=0; j<data.size(); ++j) {
+      myFile << data.at(j).second.at(i);
+      if (j != data.size() -1) {
+        myFile << ",";  // no comma at end of line
+      }
+    }
+    myFile << "\n";
+  }
+  myFile.close();
 }
 
 int main(int argc, char **argv) {
@@ -60,6 +91,11 @@ int main(int argc, char **argv) {
                                 static_cast<unsigned int>(N));
   check_launch("warm up");
 
+
+  std::vector<double> stride_array;
+  std::vector<double> time_array;
+  std::vector<double> bandwidth_array;
+  
   // Benchmark runs
   const int n_repeat = 5;
   printf("# stride     time [ms]   GB/sec\n");
@@ -86,9 +122,26 @@ int main(int argc, char **argv) {
     cudaDeviceSynchronize();
 
     printf("   %5d    %8.4f   %7.1f\n", stride, exec_time, n_repeat * 3.0 * sizeof(int) * N / exec_time * 1e-6);
+    stride_array.push_back(stride);
+    time_array.push_back(exec_time);
+    bandwidth_array.push_back(n_repeat*3.0*sizeof(int)*N/exec_time*1e-6);
+    
     cudaMemcpy(&host_z, z, sizeof(int) * MAX_STRIDE * 2, cudaMemcpyDeviceToHost);
     checkErrors(host_z, stride, MAX_STRIDE * 2);
+
   }
+
+
+  // write results to csv
+  std::vector<std::pair<std::string, std::vector<double>>> csv_out = {
+	    {"stride", stride_array},
+	    //{"time_ms", time_array}, 
+	    {"bandwidth_gbps", bandwidth_array}
+  };
+  writeToCSV("q3_1.csv", csv_out);
+  bandwidth_array.clear();
+  time_array.clear();
+  stride_array.clear();
 
   return EXIT_SUCCESS;
 }

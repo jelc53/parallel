@@ -3,7 +3,6 @@
 #SBATCH -p CME
 #SBATCH --gres gpu:1
 
-
 ### ---------------------------------------
 ### BEGINNING OF EXECUTION
 ### ---------------------------------------
@@ -26,3 +25,10 @@ echo
 echo Output from main_q3
 echo ----------------
 ./main_q3
+
+### --------------------------------------
+### DEVICE QUERY & BANDWITH TEST
+### --------------------------------------
+#./deviceQuery
+#./bandwidthTest
+
