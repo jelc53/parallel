@@ -14,10 +14,12 @@ __global__ void elementwise_add(const int *x, const int *y,
     // elementwise_add<<<72, 1024>>>(x, y, z, stride, N);
     // Use the CUDA variables gridDim, blockDim, blockIdx, and threadIdx.
     
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    
-    if (i < size) {
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+         i < size;
+         i += gridDim.x * blockDim.x) {
+        
       z[i * stride] = x[i * stride] + y[i * stride];
+
     }
 
 }

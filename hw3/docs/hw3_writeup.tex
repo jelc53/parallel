@@ -147,12 +147,25 @@ Questions 1.1-1.3: your code passed all the tests!
         \caption{Performance as we vary number of threads per block}
     \end{figure}
 
-    Performance improves roughly linearly with threads per block 
-    for the first ~400 threads, after which we get asymptotic 
-    behaviour and a saw-tooth pattern. This is because we reach 
-    the point where the overhead incurred from additional threads
-    starts to dominate performance benefit of computing incremental 
-    recurrence relations in parallel.
+    Performance improves roughly linearly as we increase threads
+    per block from 32 to 384, after which we get asymptotic 
+    behaviour and a saw-tooth pattern. 
+
+    The initial positive linear relationship comes from simply 
+    using more of the gpu's total threads and therefore running 
+    more recurrence relations in parallel.
+
+    We start to see diminshing returns (asymptotic behaviour) as
+    we add too many threads for the problem size. Our overhead from
+    spinning up additional threads approaches improvement from 
+    parallel computation.
+
+    The saw-tooth pattern reflects divisors of 1024, which is the 
+    maximum number of threads per SM as specified by our hardware
+    specifications. If our number of total threads divides evenly 
+    into 1024, we will need one less multiprocessor (including
+    overhead) than if we asked for just one additional thread.
+    
 
     \item \textbf{1.5: Vary number of blocks.} When we 
     vary number of blocks (grid size) while holding number of 
@@ -167,15 +180,26 @@ Questions 1.1-1.3: your code passed all the tests!
 
     Performance improves roughly linearly with number of blocks 
     for the first ~200 blocks, after which we get asymptotic 
-    behaviour and a saw-tooth pattern. Similar to q1.4, this is 
-    because we reach the point where the overhead incurred from 
-    additional blocks starts to dominate performance benefit of 
-    computing incremental recurrence relations in parallel.
+    behaviour. 
+    
+    Similarly to q1.4, the initial positive linear relationship comes
+    from simply using more of the gpu's total threads and therefore 
+    running more recurrence relations in parallel.
+
+    We start to see diminshing returns (asymptotic behaviour) as
+    we add too many blocks for the problem size. Our overhead from
+    spinning up additional blocks approaches improvement from 
+    parallel computation.
+
 
     \item \textbf{1.6: Vary number of iterations.} When we 
     vary number of iterations while holding number of threads 
     per block (256), number of blocks (576) and array size (1e6) 
     constant, we get the plot shown below. 
+
+    Iterations are done sequentially and so a higher number of 
+    iterations means that each thread takes longer to complete 
+    its "task" before being reassigned. 
     
     \begin{figure}[h]
         \center
@@ -185,13 +209,15 @@ Questions 1.1-1.3: your code passed all the tests!
 
     Performance jumps quickly to ~7 Tflops per second as we increase
     number of iterations from 20-120, after which we get asymptotic 
-    behaviour and a saw-tooth pattern. Iteratiions are done sequentially
-    and so a higher number of iterations means that each thread takes 
-    longer to complete its task before reassigned. This initially means
-    that we reduce overhead of assigning threads per iterations, but 
-    eventually we are working with tasks that are too big to spread
-    evenly across threads (i.e. last thread running has a large portion
-    of its task still to complete).
+    behaviour. This is because we are initially memory-bound (overhead
+    of allocating threads outweighs benefits of parallelism) until 
+    our task size (number of sequential iterations) is large enough,
+    after which point we approach our compute-bound limit.
+    
+    It is very difficult to achieve the hardware compute-bound limit 
+    with non-trivial computation. In this case we appear to approach 
+    ~10 Tflops/sec vs our theoretical hardware limit of 14.9 for the 
+    NVIDIA Quadro RTX 6000.
     
 \end{itemize}
 
@@ -293,7 +319,7 @@ uint get_total_bytes(uint nodes, uint edges, uint iterations)
     contiguously in memory within the input and inverse degree arrays, 
     and so accessing these for each edge is roughly random access.
 
-    Explain the differnce between Problem 2 and maximum bandwidth of 480 GB/sec? 
+    Explain the difference between Problem 2 and maximum bandwidth of 480 GB/sec? 
     Achieving maximum bandwidth performance would require that our memory access
     completely aligned and coalesced. We would need our access pattern to 
     be completely sequential to maximize prefetching.
@@ -314,43 +340,44 @@ strided memory access in \texttt{benchmark.cu}.
         \caption{Device bandwidth as we increase stride}
     \end{figure}
 
-    \item \textbf{3.2: Comment on shape of graph.} As expected, we observe 
-    declining performance as we increase stride length. This is because 
-    it becomes less and less common for us to "prefetch" memory relevant 
-    for a subsequent computation if the next required word does not have a 
-    nearby global memory address.
+    \item \textbf{3.2: Comment on shape of graph.} As expected, we 
+    initially observe asymptotic declining performance as we increase 
+    stride length. This is because it becomes less and less common for 
+    us to "prefetch" memory relevant for a subsequent computation if 
+    the next required word does not have a nearby global memory address.
 
-    After some point (stride ~10), our performance plateaus. This corresponds 
-    to the point where every new read requires accessing global memory (i.e. 
-    never available in register).
+    After some point, our performance plateaus. This corresponds to a stride
+    length of 32. Since cache requests are done at the warp level, and each 
+    warp has 32 threads, this corresponds to the point at which every 
+    subsequent thread requires global memory access (cache miss).
 
 \end{itemize}
 
 
 Submission information logs.
 \begin{verbatim}
-jelc@cardinal2:~$ /afs/ir.stanford.edu/class/cme213/script/submit.py hw3 private/cme213-jelc53/hw3/
+jelc@cardinal2:~$ /afs/ir.stanford.edu/class/cme213/script/submit.py hw3 private/cme213-jelc53/hw3
 Submission for assignment 'hw3' as user 'jelc'
-Attempt 1/10
-Time stamp: 2022-04-30 18:13
+Attempt 2/10
+Time stamp: 2022-05-01 21:36
 List of files being copied:
     private/cme213-jelc53/hw3/main_q1.cu	 [13253 bytes]
     private/cme213-jelc53/hw3/recurrence.cuh	 [1589 bytes]
     private/cme213-jelc53/hw3/pagerank.cuh	 [5894 bytes]
-    private/cme213-jelc53/hw3/benchmark.cuh	 [746 bytes]
+    private/cme213-jelc53/hw3/benchmark.cuh	 [795 bytes]
 
 Your files were copied successfully.
-Directory where files were copied: /afs/ir.stanford.edu/class/cme213/submissions/hw3/jelc/1
+Directory where files were copied: /afs/ir.stanford.edu/class/cme213/submissions/hw3/jelc/2
 List of files in this directory:
     main_q1.cu	 [13253 bytes]
     recurrence.cuh	 [1589 bytes]
     pagerank.cuh	 [5894 bytes]
-    benchmark.cuh	 [746 bytes]
+    benchmark.cuh	 [795 bytes]
     metadata	 [137 bytes]
 
 This completes the submission process. Thank you!
     
-jelc@cardinal2:~$ ls /afs/ir.stanford.edu/class/cme213/submissions/hw3/jelc/1
+jelc@cardinal2:~$ ls /afs/ir.stanford.edu/class/cme213/submissions/hw3/jelc/2
 benchmark.cuh  main_q1.cu  metadata  pagerank.cuh  recurrence.cuh
 \end{verbatim}
 
