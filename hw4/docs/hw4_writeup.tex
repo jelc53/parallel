@@ -1,0 +1,69 @@
+\documentclass[12pt,letterpaper,twoside]{article}
+
+\newif\ifsolution\solutiontrue   % Include the solutions
+%\newif\ifsolution\solutionfalse  % Exclude the solutions
+
+\usepackage{cme213}
+\usepackage{xcolor}
+\usepackage{graphicx}
+
+\newcommand{\T}[1]{\text{\texttt{#1}}}
+\newcommand{\V}[1]{\text{\textit{#1}}}
+
+\begin{document}
+
+{\centering \textbf{Homework 4: CUDA GPU Matrix Operations\\}}
+\vspace*{-8pt}\noindent\rule{\linewidth}{1pt}
+
+\paragraph{Problem 1: Recurrence } Implement a simple CUDA program for 
+a recurrence relation (inspired by the Mandelbrot Set) for many 
+different starting points.
+
+\begin{itemize}
+    \item \textbf{1.1: Allocate GPU memory.} Idea: Use \texttt{cudaMalloc}
+    to allocate memory on the GPU device for both the input and output 
+    arrays we will need for the recurrence implementation. Free memory 
+    with \texttt{cudaFree} at end of \texttt{main()}.
+
+\begin{cpp}
+// Allocate num_bytes of memory to the device arrays
+cudaMalloc(&device_input_array, num_bytes);
+cudaMalloc(&device_output_array, num_bytes);
+...
+...
+
+// Deallocate memory from both device arrays
+cudaFree(device_input_array);
+cudaFree(device_output_array);
+\end{cpp}
+
+\end{itemize}
+
+Submission information logs.
+\begin{verbatim}
+jelc@cardinal2:~$ /afs/ir.stanford.edu/class/cme213/script/submit.py hw3 private/cme213-jelc53/hw3
+Submission for assignment 'hw3' as user 'jelc'
+Attempt 2/10
+Time stamp: 2022-05-01 21:36
+List of files being copied:
+    private/cme213-jelc53/hw3/main_q1.cu	 [13253 bytes]
+    private/cme213-jelc53/hw3/recurrence.cuh	 [1589 bytes]
+    private/cme213-jelc53/hw3/pagerank.cuh	 [5894 bytes]
+    private/cme213-jelc53/hw3/benchmark.cuh	 [795 bytes]
+
+Your files were copied successfully.
+Directory where files were copied: /afs/ir.stanford.edu/class/cme213/submissions/hw3/jelc/2
+List of files in this directory:
+    main_q1.cu	 [13253 bytes]
+    recurrence.cuh	 [1589 bytes]
+    pagerank.cuh	 [5894 bytes]
+    benchmark.cuh	 [795 bytes]
+    metadata	 [137 bytes]
+
+This completes the submission process. Thank you!
+    
+jelc@cardinal2:~$ ls /afs/ir.stanford.edu/class/cme213/submissions/hw3/jelc/2
+benchmark.cuh  main_q1.cu  metadata  pagerank.cuh  recurrence.cuh
+\end{verbatim}
+
+\end{document}
