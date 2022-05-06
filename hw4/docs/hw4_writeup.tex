@@ -15,15 +15,10 @@
 {\centering \textbf{Homework 4: CUDA GPU Matrix Operations\\}}
 \vspace*{-8pt}\noindent\rule{\linewidth}{1pt}
 
-\paragraph{Problem 1: Recurrence } Implement a simple CUDA program for 
-a recurrence relation (inspired by the Mandelbrot Set) for many 
-different starting points.
+Goal of the homework is to implement a finite difference solver for the
+2-dim heat equation using CUDA GPU programming.
 
-\begin{itemize}
-    \item \textbf{1.1: Allocate GPU memory.} Idea: Use \texttt{cudaMalloc}
-    to allocate memory on the GPU device for both the input and output 
-    arrays we will need for the recurrence implementation. Free memory 
-    with \texttt{cudaFree} at end of \texttt{main()}.
+\paragraph{Problem 1: Implement gpuStencil Global } ...
 
 \begin{cpp}
 // Allocate num_bytes of memory to the device arrays
@@ -37,7 +32,6 @@ cudaFree(device_input_array);
 cudaFree(device_output_array);
 \end{cpp}
 
-\end{itemize}
 
 Submission information logs.
 \begin{verbatim}
