@@ -18,20 +18,61 @@
 Goal of the homework is to implement a finite difference solver for the
 2-dim heat equation using CUDA GPU programming.
 
-\paragraph{Problem 1: Implement gpuStencil Global } ...
+\paragraph{Problem 1: Implement gpuStencil Global } Idea: parallelize spatial
+dimension updates for each time step iteration. One key challenge was to handle
+the different border sizes for order inputs of 2, 4 and 8. Kernel logic included
+below.
 
 \begin{cpp}
-// Allocate num_bytes of memory to the device arrays
-cudaMalloc(&device_input_array, num_bytes);
-cudaMalloc(&device_output_array, num_bytes);
-...
-...
-
-// Deallocate memory from both device arrays
-cudaFree(device_input_array);
-cudaFree(device_output_array);
+/**
+ * Kernel to propagate finite difference grid from the current
+ * time point to the next.
+ */
+template<int order>
+__global__
+void gpuStencilGlobal(float* next, const float* __restrict__ curr, 
+                      int gx, int nx, int ny, float xcfl, float ycfl) {
+    
+    int borderSize = (int) (order / 2);
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+   
+    if (i < nx*ny) {
+	int x = borderSize + (int) (i / nx);
+	int y = borderSize + (i % nx);
+        int idx = gx * y + x;   
+        next[idx] = Stencil<order>(&curr[idx], gx, xcfl, ycfl);
+    
+    }
+}
 \end{cpp}
 
+3D surface plots of temperature on 256 x 256 grid at iterations 0, 1000 and 
+2000 respectively, with 8th order. To do this, I used parameter settings of:
+order = 8 and nx = ny = 248.
+
+\begin{figure}[h]
+    \center
+    \includegraphics[scale=0.7]{global0000.png}
+    \caption{3D surafce plot of temperature at iteration 0}
+\end{figure}
+
+\begin{figure}[h]
+    \center
+    \includegraphics[scale=0.7]{global1000.png}
+    \caption{3D surafce plot of temperature at iteration 1000}
+\end{figure}
+
+\begin{figure}[h]
+    \center
+    \includegraphics[scale=0.7]{global2000.png}
+    \caption{3D surafce plot of temperature at iteration 2000}
+\end{figure}
+
+
+\paragraph{Problem 2: Implement gpuStencil Block } Idea: ...
+
+...
+...
 
 Submission information logs.
 \begin{verbatim}

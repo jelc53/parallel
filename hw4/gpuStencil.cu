@@ -72,14 +72,15 @@ __global__
 void gpuStencilGlobal(float* next, const float* __restrict__ curr, int gx, int nx, int ny,
                 float xcfl, float ycfl) {
     
-    for (int i = blockIdx.x * blockDim.x + threadIdx.x;
-        i < nx*yx;
-	i += gridDim.x * blockDim.x) {
-        
-	next[i] = stencil<order>(curr[i], gx, xcfl, ycfl);
+    int borderSize = (int) (order / 2);
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
    
-	//for (int y = border; y < ny + border; ++y) {
-	//    for (int x = border; x < nx + border; ++x) {
+    if (i < nx*ny) {
+	int x = borderSize + (int) (i / nx);
+	int y = borderSize + (i % nx);
+        int idx = gx * y + x;   
+        next[idx] = Stencil<order>(&curr[idx], gx, xcfl, ycfl);
+    
     }
 }
 
@@ -106,27 +107,48 @@ double gpuComputationGlobal(Grid& curr_grid, const simParams& params) {
     int gx = params.gx();
     float xcfl = params.xcfl();
     float ycfl = params.ycfl();
-    int order = params.order();
-    int border = params.borderSize();
 
     // Benchmark timing
     event_pair timer;
     start_timer(&timer);
 
-    // Specify block and grid dim?
-    const int block_size = 1024;
+    // Specify block and grid dim
+    const int block_size = 256;
     const int grid_size = (nx*ny + block_size - 1) / block_size;
 
     for(int i = 0; i < params.iters(); ++i) {
         // update the values on the boundary only
         BC.updateBC(next_grid.dGrid_, curr_grid.dGrid_);
+        
+	// Apply stencil
+        if (params.order() == 2) {
+            gpuStencilGlobal<2><<<grid_size, block_size>>>(
+                next_grid.dGrid_, curr_grid.dGrid_, 
+                gx, nx, ny, xcfl, ycfl
+            );
+        } else if (params.order() == 4) {
+            gpuStencilGlobal<4><<<grid_size, block_size>>>(
+                next_grid.dGrid_, curr_grid.dGrid_, 
+                gx, nx, ny, xcfl, ycfl
+            );
+        } else if (params.order() == 8) {
+            gpuStencilGlobal<8><<<grid_size, block_size>>>(
+                next_grid.dGrid_, curr_grid.dGrid_, 
+                gx, nx, ny, xcfl, ycfl
+            );
 
-        // Apply stencil
-        gpuStencilGlobal<order><<<grid_size, block_size>>>(
-	    next_grid, curr_grid, 
-	    gx, nx, ny, xcfl, ycfl
-        );
-	        
+	    // Save results 
+	    if (i == 0) {
+                next_grid.saveStateToFile("global0000.csv");
+	    }
+	    else if (i == 1000) {
+		next_grid.saveStateToFile("global1000.csv");
+	    }
+            else if (i == 2000) {
+		next_grid.saveStateToFile("global2000.csv");
+	    }
+        }
+   
         Grid::swap(curr_grid, next_grid);
     }
 
@@ -160,7 +182,19 @@ template<int order, int numYPerStep>
 __global__
 void gpuStencilBlock(float* next, const float* __restrict__ curr, int gx, int nx, int ny,
                     float xcfl, float ycfl) {
-    // TODO
+    
+    int borderSize = (int) (order / 2);
+
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * (blockDim.y*numyPerStep) + (threadIdx.y*numYPerStep);
+        int x = borderSize + i;
+        int y = borderSize + j;  
+
+    if (i < nx && xj < ny) {
+        int idx = gx * y + x;   
+        next[idx] = Stencil<order>(&curr[idx], gx, xcfl, ycfl);
+    }  
+    
 }
 
 /**
@@ -177,22 +211,46 @@ void gpuStencilBlock(float* next, const float* __restrict__ curr, int gx, int nx
 double gpuComputationBlock(Grid& curr_grid, const simParams& params) {
 
     boundary_conditions BC(params);
-
     Grid next_grid(curr_grid);
+    
+    // Load compute parameters
+    int nx = params.nx();
+    int ny = params.ny();
+    int gx = params.gx();
+    float xcfl = params.xcfl();
+    float ycfl = params.ycfl();
 
-    // TODO: Declare variables/Compute parameters.
-    dim3 threads(0, 0);
-    dim3 blocks(0, 0);
 
+    // Declare variables
+    dim3 threads(64, 16); // chosen to maximise available threads on SM 
+    dim3 blocks((nx + threads.x - 1)/threads.x, (ny + threads.y - 1)/threads.y);
+    
+    // Benchmark timing
     event_pair timer;
     start_timer(&timer);
 
     for(int i = 0; i < params.iters(); ++i) {
-        // update the values on the boundary only
+        
+	// update the values on the boundary only
         BC.updateBC(next_grid.dGrid_, curr_grid.dGrid_);
-
-        // TODO: Apply stencil.
-	// ...
+        
+	// Apply stencil
+        if (params.order() == 2) {
+            gpuStencilBlock<2, 4><<<blocks, threads>>>(
+                next_grid.dGrid_, curr_grid.dGrid_, 
+                gx, nx, ny, xcfl, ycfl
+            );
+        } else if (params.order() == 4) {
+            gpuStencilBlock<4, 4><<<blocks, threads>>>(
+                next_grid.dGrid_, curr_grid.dGrid_, 
+                gx, nx, ny, xcfl, ycfl
+            );
+        } else if (params.order() == 8) {
+            gpuStencilBlock<8, 4><<<blocks, threads>>>(
+                next_grid.dGrid_, curr_grid.dGrid_, 
+                gx, nx, ny, xcfl, ycfl
+            );
+        }
 
         Grid::swap(curr_grid, next_grid);
     }
