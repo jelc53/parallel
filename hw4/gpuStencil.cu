@@ -178,7 +178,7 @@ void gpuStencilBlock(float* next, const float* __restrict__ curr, int gx, int nx
     
     int border = (int) (order / 2);
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = blockIdx.y * (blockDim.y*numYPerStep) + threadIdx.y;
+    int j = (blockIdx.y * blockDim.y + threadIdx.y)*numYPerStep;
 
     if (i < nx) {
 	int x = i + border;  // x coordinate of matrix
