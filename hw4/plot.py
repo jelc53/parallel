@@ -36,6 +36,10 @@ def main():
     surf = ax.plot_surface(X, Y, Z, cmap=cm.coolwarm, 
                     linewidth=0, antialiased=False)
     
+    ax.set_xlim([0, 256])
+    ax.set_ylim([0, 256])
+    ax.set_zlim([-1, 1])
+
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax.set_zlabel("T")
