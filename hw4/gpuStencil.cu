@@ -183,13 +183,13 @@ void gpuStencilBlock(float* next, const float* __restrict__ curr, int gx, int nx
     int j = (blockIdx.y * blockDim.y + threadIdx.y)*numYPerStep;
 
     if (i < nx) {
-	int x = i + border;  // x coordinate of matrix
+	    int x = i + border;  // x coordinate of matrix
         int niter = min(numYPerStep, ny-j);  // number of updates thread computes
-	for (int it = 0; it < niter; it++) {
-	    int y = j + it + border;
-            int idx = gx * y + x;
-            next[idx] = Stencil<order>(&curr[idx], gx, xcfl, ycfl);
-	}
+        for (int it = 0; it < niter; it++) {
+            int y = j + it + border;
+                int idx = gx * y + x;
+                next[idx] = Stencil<order>(&curr[idx], gx, xcfl, ycfl);
+        }
     }
 }
 
@@ -307,20 +307,19 @@ void gpuStencilShared(float* next, const float* __restrict__ curr, int gx, int g
 	threadIdx.x < (side-border)) 
     {
         int niter = min(numY, gy-j);  // number of updates thread computes 
-	for (int it = 0; it < niter; it++) {
-	    if ((j+it) < (gy-border) &&
-	        (threadIdx.y*numY+it) >= border &&
-                (threadIdx.y*numY+it) < (side-border)) 
-	    {
-	        next[gx*(j+it)+i] = Stencil<order>(
-	            &shared[threadIdx.y*numY+it][threadIdx.x], 
-	            side, 
-	            xcfl, 
-	            ycfl);
-	    }
-	}
+        for (int it = 0; it < niter; it++) {
+            if ((j+it) < (gy-border) &&
+                (threadIdx.y*numY+it) >= border &&
+                    (threadIdx.y*numY+it) < (side-border)) 
+            {
+                next[gx*(j+it)+i] = Stencil<order>(
+                    &shared[threadIdx.y*numY+it][threadIdx.x], 
+                    side, 
+                    xcfl, 
+                    ycfl);
+            }
+        }
     }
-
 }
 
 /**

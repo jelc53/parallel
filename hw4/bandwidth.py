@@ -9,13 +9,13 @@ from matplotlib.ticker import LinearLocator
 
 def plot_bandwidth_by_algorithm(data, out_dir, ord):
 
-    algs = data["stencil"].unique()
+    algs = data['algorithm'].unique()
     filtered_data = data[data["order"] == ord].copy()
     x = ['256x256', '512x512', '1024x1024', '2048x2048', '4096x4096']
     # x = np.array([256**2, 512**2, 1024**2, 2048**2, 4096**2])
 
     for alg in algs:
-        y = filtered_data[filtered_data['stencil'] == alg]['bandwidth']
+        y = filtered_data[filtered_data['algorithm'] == alg]['bandwidth_gbps']
         plt.plot(x, y, label=alg)
 
     plt.xlabel('Grid size in MegaPoints')
@@ -35,12 +35,12 @@ def plot_bandwidth_by_algorithm(data, out_dir, ord):
 def plot_bandwidth_by_order(data, out_dir, alg):
 
     ords = data["order"].unique()
-    filtered_data = data[data["stencil"] == alg]
+    filtered_data = data[data["algorithm"] == alg]
     x = ['256x256', '512x512', '1024x1024', '2048x2048', '4096x4096']
     # x = np.array([256**2, 512**2, 1024**2, 2048**2, 4096**2])
 
     for ord in ords:
-        y = filtered_data[filtered_data['order'] == ord]['bandwidth']
+        y = filtered_data[filtered_data['order'] == ord]['bandwidth_gbps']
         plt.plot(x, y, label=ord)
 
     plt.xlabel('Grid size in MegaPoints')
@@ -66,6 +66,7 @@ def main():
     plt.style.use('ggplot')
     plot_bandwidth_by_algorithm(data, out_dir, ord=8)
     plot_bandwidth_by_order(data, out_dir, alg='block')
+    plot_bandwidth_by_order(data, out_dir, alg='shared')
 
 
 if __name__ == '__main__':

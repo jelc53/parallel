@@ -5,6 +5,7 @@
 
 \usepackage{cme213}
 \usepackage{xcolor}
+\usepackage{float}
 \usepackage{graphicx}
 
 \newcommand{\T}[1]{\text{\texttt{#1}}}
@@ -46,39 +47,42 @@ void gpuStencilGlobal(float* next, const float* __restrict__ curr,
 }
 \end{cpp}
 
-3D surface plots of temperature on 256 x 256 grid at iterations 0, 1000 and 
+3D surface plots of temperature on 256x256 grid at iterations 0, 1000 and 
 2000 respectively, with 8th order. To do this, I used parameter settings of:
-order = 8 and nx = ny = 248.
+order = 8 and nx = ny = 248. As expected for heat diiffusion, our solution
+tends towards a low entropy state of constant temperature.
 
-\begin{figure}[h]
-    \center
+\begin{figure}[!htbp]
+    \centering
     \includegraphics[scale=0.7]{global_0000.png}
     \caption{3D surface plot of temperature at iteration 0}
 \end{figure}
 
-\begin{figure}[h]
-    \center
+\begin{figure}[!htbp]
+    \centering
     \includegraphics[scale=0.7]{global_1000.png}
     \caption{3D surface plot of temperature at iteration 1000}
 \end{figure}
 
-\begin{figure}[h]
-    \center
+\begin{figure}[!htbp]
+    \centering
     \includegraphics[scale=0.7]{global_2000.png}
     \caption{3D surface plot of temperature at iteration 2000}
 \end{figure}
 
-Performance in terms of both time (ms) and bandwidth (Gb/sec) are worse than
-that observed for CPU computation. Console logs included below.
+Performance in terms of both time (ms) and bandwidth (Gb/sec) are much 
+better already than those observed for CPU computation. Console logs 
+included at end of this document.
 
 
-\paragraph{Problem 2: Implement global memory block kernel } Idea: re-write kernel to 
-compute finite difference updates in blocks of size (blockDim.y * numYPerStep) 
-* blockDim.x. It should still only use global memory.
+\paragraph{Problem 2: Implement global memory block kernel } Idea: re-write 
+kernel to compute finite difference updates in blocks of size (\texttt{blockDim.y} 
+* \texttt{numYPerStep}) * \texttt{blockDim.x}. It should still only use 
+global memory.
 
-In order to ensure each thread calculates at most numYPerStep updates, we add 
-a for loop inside the kernel and carefully change thread block indexing for y 
-dimension to be multiples of numYPerStep.
+In order to ensure each thread calculates at most \texttt{numYPerStep} updates, we add 
+a for loop inside the kernel (sequential y steps for each thread) and change thread 
+block indexing for y dimension to be multiples of \texttt{numYPerStep}.
 
 \begin{cpp}
 /**
@@ -95,7 +99,6 @@ __global__
 void gpuStencilBlock(float* next, const float* __restrict__ curr, int gx, int nx, int ny,
                     float xcfl, float ycfl) {
     
-    
     int border = (int) (order / 2);
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = (blockIdx.y * blockDim.y + threadIdx.y)*numYPerStep;
@@ -105,73 +108,101 @@ void gpuStencilBlock(float* next, const float* __restrict__ curr, int gx, int nx
         int niter = min(numYPerStep, ny-j);  // number of updates thread computes
         for (int it = 0; it < niter; it++) {
             int y = j + it + border;
-            int idx = gx * y + x;
-            next[idx] = Stencil<order>(&curr[idx], gx, xcfl, ycfl);
+                int idx = gx * y + x;
+                next[idx] = Stencil<order>(&curr[idx], gx, xcfl, ycfl);
         }
     }
 }
 \end{cpp}
 
 Performance in terms of both time (ms) and bandwidth (Gb/sec) improved significantly
-compared with \texttt{gpuStencilGlobal}. Console logs included below.
+compared with \texttt{gpuStencilGlobal}. Console logs included at end of this document.
 
 
 \paragraph{Problem 3: Plot bandwidth by grid size } Idea: want to understand how the 
 different algorithms perform in terms of bandwidth as we increase the scale of the 
 problem (grid size).
 
-To do this, we fixed iterations to be 400 and used the following grid sizes: 
-256 x 256; 512 x 512; 1024 x 1024; 2048 x 2048; 4096 x 4096.
+To do this, we fixed iterations to be 100 and used the following grid sizes: 
+256x256; 512x512; 1024x1024; 2048x2048; 4096x4096.
 
-\begin{figure}[h]
-    \center
+\begin{figure}[!htbp]
+    \centering
     \includegraphics[scale=0.7]{bandwidth_by_alg_ord8.png}
-    \caption{Plot of bandwidth vs grid size for different algorithms at order 8}
+    \caption{Bandwidth vs grid size for different algorithms at order 8}
 \end{figure}
 
-...
-...
+Figure 4 illustrates how bandwidth changes with grid size at order 8 for our three 
+different algorithms: global, block and shared. As we might expect, bandwidth 
+initially increases with grid size (as we increase the number of warps 
+simultaneously making requests to global memory), and asymptotically 
+approaches a limit that represents our memory bound. Interestingly 
+the block algorithm achieves higher bandwidth than shared and 
+global algorithms for all larger grid sizes.
 
-\begin{figure}[h]
-    \center
+\begin{figure}[!htbp]
+    \centering
     \includegraphics[scale=0.7]{bandwidth_by_order_block.png}
-    \caption{Plot of bandwidth vs grid size for block algorithm at orders 2, 4 and 8}
+    \caption{Bandwidth vs grid size for block algorithm at orders 2, 4 and 8}
 \end{figure}
 
-...
-...
+Figure 5 illustrates how bandwidth changes with grid size for our block algorithm 
+as we increase grid size for orders 2, 4 and 8. As expected, bandwidth improves 
+as we increase order of our stencil. This is because a higher order stencil will 
+be making more coalesced requests to global memory.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[scale=0.7]{bandwidth_by_order_shared.png}
+    \caption{Bandwidth vs grid size for shared algorithm at orders 2, 4 and 8}
+\end{figure}
+
+Figure 6 illustrates how bandwidth changes with grid size for our shared memory
+algorithm as we increase grid size for orders 2, 4 and 8. Similar to our block 
+algorithm, we see bandwidth improves as we increase order of the stencil. This 
+is because a higher order stencil will be making more coalesced requests to 
+shared memory associated with each thread block.
 
 
 \paragraph{Problem 4: Explain performance results } For my implementation, the block
-kernel for order 8 stencil achieved the best bandwidth (Gb/sec). 
+kernel for order 8 stencil achieved the best bandwidth (Gb/sec) across all grid sizes.
+However, my shared kernel performed comparably on time (ms) and was sometimes faster 
+at higher grid sizes, iterations and order.
 
-Bandwidth is number of memory accesses divided by total execution time. In general, 
+Bandwidth is the number of memory accesses divided by total execution time. In general, 
 as you increase the number of warps requesting memory, you hide the latency of 
 the memory pipe.
 
 \begin{itemize}
-    \item \textbf{Difference among kernels. } ...
+    \item \textbf{Difference among kernels. } The block kernel outperformed both shared 
+    and global kernels (figure 4). While this was expected for the global kernel given our block 
+    implementation should result in more cache hits, the shared memory performance was 
+    surprising. This may be due to bank conflicts or calibration of thread block 
+    dimensions vs \texttt{numYPerStep}.
 
     \item \textbf{Difference from varying order. } As you increase stencil order, 
-    you increase the number of memory access requests for each warp to complete its 
-    task. This hides latency and improves bandwidth.
+    you improve the memory request pattern of each warp to be more coalesced.
+    This hides latency and improves bandwidth (figure 5).
 
     \item \textbf{Difference from varying problem size. } As you increase grid size, 
-    you increase the number of warps requesting memory, which hides latency and 
-    improves our bandwidth. This improvement will asymptotically approach the 
-    compute bound of our hardware.
+    you increase the number of warps requesting memory in parallel, which hides 
+    latency and improves our bandwidth. This improvement will asymptotically 
+    approach the memory bound (figures 4, 5 and 6).
 
 \end{itemize}
 
 
 \paragraph{Problem 5: Implement shared memory block kernel } Idea: copy across current 
-array values into shared memory to reduce access requests to global memory. We do this 
-at the thread block level since we are guaranteed warps within a thread block share the 
-same SM and therefore shared memory. Kernel logic included below.
+array values into shared memory to reduce access requests to global memory and make use 
+of higher shared memory access speeds (lower latency because closer to each processor 
+core). We do this at the thread block level since we are guaranteed warps within a 
+thread block share the same SM and therefore shared memory. 
 
-Note, one challenge we need to work around is that each thread block needs to be able to 
-access more values from the current array than it updates. This means our shared memory 
-blocks are necessarily overlapping to ensure we update the whole array.
+One key challenge was that each thread block needs to be able to access more values from 
+the current array than it updates (based on stencil order). This means our shared memory 
+blocks are necessarily overlapping to ensure we update the whole array. We enforce this 
+"overlapping" thread block behaviour through our mapping of thread id to our current 
+array index. Kernel logic included below.
 
 \begin{cpp}
 /**
@@ -184,43 +215,52 @@ blocks are necessarily overlapping to ensure we update the whole array.
 template<int side, int order>
 __global__
 void gpuStencilShared(float* next, const float* __restrict__ curr, int gx, int gy,
-                float xcfl, float ycfl) {
+               float xcfl, float ycfl) {
     
     // map thread to global position
-    //int i = blockIdx.x * blockDim.x + threadIdx.x;
-    //int j = blockIdx.y * blockDim.y + threadIdx.y;
-    int border = (int) (order / 2);
-    int sub_square_side = side - 2*border;
+    int border = order / 2;
+    int numY = side / blockDim.y;
+    int sub_square_side = side - order;
     int i = blockIdx.x*sub_square_side + threadIdx.x;
-    int j = blockIdx.y*sub_square_side + threadIdx.y;
-
+    int j = blockIdx.y*sub_square_side + threadIdx.y*numY;
+    
     // load mesh grid into shared memory
     __shared__ float shared[side][side];
-    shared[threadIdx.x][threadIdx.y] = curr[gx * j + i];
-    __syncthreads();
+    if (i < gx) 
+    {
+        int niter = min(numY, gy-j);  // number of updates thread computes 
+	for (int it = 0; it < niter; it++) {
+	    if ((j+it) < gy) {
+	        shared[threadIdx.y*numY+it][threadIdx.x] = curr[gx*(j+it)+i];
+	    }
+	}
+    }
+    __syncthreads(); 
 
     // apply stencil inside domain
-    if (i >= border && i < (gx-border)) {
-        if (j >= border && j < (gy-border)) {
-    
-        if (threadIdx.x >= border && threadIdx.x < (side-border) &&
-            threadIdx.y >= border && threadIdx.y < (side-border)) {
-        
-            next[gx * j + i] = Stencil<order>(
-                &shared[threadIdx.x][threadIdx.y], 
-                gx, 
-                xcfl, 
-                ycfl);
+    if (i < (gx-border) &&
+	threadIdx.x >= border && 
+	threadIdx.x < (side-border)) 
+    {
+        int niter = min(numY, gy-j);  // number of updates thread computes 
+        for (int it = 0; it < niter; it++) {
+            if ((j+it) < (gy-border) &&
+                (threadIdx.y*numY+it) >= border &&
+                    (threadIdx.y*numY+it) < (side-border)) 
+            {
+                next[gx*(j+it)+i] = Stencil<order>(
+                    &shared[threadIdx.y*numY+it][threadIdx.x], 
+                    side, 
+                    xcfl, 
+                    ycfl);
             }
         }
     }
-
-}
-   
+} 
 \end{cpp}
 
-
-Console logs from executing our kernels for grid size $1024x1024$
+\pagebreak
+Console logs from executing our kernels for grid size 1024x1024
 at order 8 for 400 iterations.
 
 \begin{verbatim}
@@ -242,29 +282,25 @@ Order: 8, 4096x4096, 100 iterations
 
 Submission information logs.
 \begin{verbatim}
-jelc@cardinal2:~$ /afs/ir.stanford.edu/class/cme213/script/submit.py hw3 private/cme213-jelc53/hw3
-Submission for assignment 'hw3' as user 'jelc'
-Attempt 2/10
-Time stamp: 2022-05-01 21:36
+jelc@cardinal2:~$ /afs/ir.stanford.edu/class/cme213/script/submit.py hw4 private/cme213-jelc53/hw4/
+Submission for assignment 'hw4' as user 'jelc'
+Attempt 1/10
+Time stamp: 2022-05-19 00:20
 List of files being copied:
-    private/cme213-jelc53/hw3/main_q1.cu	 [13253 bytes]
-    private/cme213-jelc53/hw3/recurrence.cuh	 [1589 bytes]
-    private/cme213-jelc53/hw3/pagerank.cuh	 [5894 bytes]
-    private/cme213-jelc53/hw3/benchmark.cuh	 [795 bytes]
+    private/cme213-jelc53/hw4/gpuStencil.cu	 [12599 bytes]
 
 Your files were copied successfully.
-Directory where files were copied: /afs/ir.stanford.edu/class/cme213/submissions/hw3/jelc/2
+Directory where files were copied: /afs/ir.stanford.edu/class/cme213/submissions/hw4/jelc/1
 List of files in this directory:
-    main_q1.cu	 [13253 bytes]
-    recurrence.cuh	 [1589 bytes]
-    pagerank.cuh	 [5894 bytes]
-    benchmark.cuh	 [795 bytes]
+    gpuStencil.cu	 [12599 bytes]
     metadata	 [137 bytes]
 
 This completes the submission process. Thank you!
     
-jelc@cardinal2:~$ ls /afs/ir.stanford.edu/class/cme213/submissions/hw3/jelc/2
-benchmark.cuh  main_q1.cu  metadata  pagerank.cuh  recurrence.cuh
+
+jelc@cardinal2:~$ ls /afs/ir.stanford.edu/class/cme213/submissions/hw4/jelc/1
+gpuStencil.cu  metadata
+
 \end{verbatim}
 
 \end{document}
