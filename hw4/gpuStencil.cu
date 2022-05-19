@@ -72,12 +72,12 @@ __global__
 void gpuStencilGlobal(float* next, const float* __restrict__ curr, int gx, int nx, int ny,
                 float xcfl, float ycfl) {
     
-    int border = (int) (order / 2);
+    int border = order / 2;
     int i = blockIdx.x * blockDim.x + threadIdx.x;
    
     if (i < nx*ny) {
-	int x = border + (int) (i / nx);
-	int y = border + (i % nx);
+	int x = border + (i % nx);
+	int y = border + (i / nx);
         int idx = gx * y + x;   
         next[idx] = Stencil<order>(&curr[idx], gx, xcfl, ycfl);
     
@@ -109,7 +109,7 @@ double gpuComputationGlobal(Grid& curr_grid, const simParams& params) {
     float ycfl = params.ycfl();
 
     // declare block and grid dims
-    const int block_size = 256;
+    const int block_size = 1024;
     const int grid_size = (nx*ny + block_size - 1) / block_size;
     
     // benchmark timing
@@ -140,12 +140,14 @@ double gpuComputationGlobal(Grid& curr_grid, const simParams& params) {
         Grid::swap(curr_grid, next_grid);
     }
 
+    check_launch("gpuStencilGlobal");
+    double timing = stop_timer(&timer);
+
     // save results
     curr_grid.fromGPU();
     curr_grid.saveStateToFile("global_out.csv");
 
-    check_launch("gpuStencilGlobal");
-    return stop_timer(&timer);
+    return timing;
 
 }
 
@@ -280,31 +282,42 @@ void gpuStencilShared(float* next, const float* __restrict__ curr, int gx, int g
                float xcfl, float ycfl) {
     
     // map thread to global position
-    //int i = blockIdx.x * blockDim.x + threadIdx.x;
-    //int j = blockIdx.y * blockDim.y + threadIdx.y;
-    int border = (int) (order / 2);
-    int sub_square_side = side - 2*border;
+    int border = order / 2;
+    int numY = side / blockDim.y;
+    int sub_square_side = side - order;
     int i = blockIdx.x*sub_square_side + threadIdx.x;
-    int j = blockIdx.y*sub_square_side + threadIdx.y;
-
+    int j = blockIdx.y*sub_square_side + threadIdx.y*numY;
+    
     // load mesh grid into shared memory
     __shared__ float shared[side][side];
-    shared[threadIdx.x][threadIdx.y] = curr[gx * j + i];
-    __syncthreads();
+    if (i < gx) 
+    {
+        int niter = min(numY, gy-j);  // number of updates thread computes 
+	for (int it = 0; it < niter; it++) {
+	    if ((j+it) < gy) {
+	        shared[threadIdx.y*numY+it][threadIdx.x] = curr[gx*(j+it)+i];
+	    }
+	}
+    }
+    __syncthreads(); 
 
     // apply stencil inside domain
-    if (i >= border && i < (gx-border)) {
-        if (j >= border && j < (gy-border)) {
-    
-	    if (threadIdx.x >= border && threadIdx.x < (side-border) &&
-	        threadIdx.y >= border && threadIdx.y < (side-border)) {
-        
-	        next[gx * j + i] = Stencil<order>(
-	            &shared[threadIdx.x][threadIdx.y], 
-	            gx, 
+    if (i < (gx-border) &&
+	threadIdx.x >= border && 
+	threadIdx.x < (side-border)) 
+    {
+        int niter = min(numY, gy-j);  // number of updates thread computes 
+	for (int it = 0; it < niter; it++) {
+	    if ((j+it) < (gy-border) &&
+	        (threadIdx.y*numY+it) >= border &&
+                (threadIdx.y*numY+it) < (side-border)) 
+	    {
+	        next[gx*(j+it)+i] = Stencil<order>(
+	            &shared[threadIdx.y*numY+it][threadIdx.x], 
+	            side, 
 	            xcfl, 
 	            ycfl);
-            }
+	    }
 	}
     }
 
@@ -334,12 +347,14 @@ double gpuComputationShared(Grid& curr_grid, const simParams& params) {
     float ycfl = params.ycfl();
 
     // declare block dim
-    #define side 64 
-    dim3 threads(side, side);
+    #define side 64
+    int numYPerThread = 4;
+    dim3 threads(side, side/numYPerThread);
 
     // declare grid dim
-    int xblocks = (gx + threads.x - 1)/threads.x; 
-    int yblocks = (gy + threads.y - 1)/threads.y; 
+    int sub_square = side - order;
+    int xblocks = (gx + sub_square - 1) / sub_square;
+    int yblocks = (gy + sub_square - 1) / sub_square;
     dim3 blocks(xblocks, yblocks);
     
     event_pair timer;
@@ -350,18 +365,18 @@ double gpuComputationShared(Grid& curr_grid, const simParams& params) {
 	// update the values on the boundary only
         BC.updateBC(next_grid.dGrid_, curr_grid.dGrid_);
 
-        // apply stencil.
-        if (params.order() == 2) {
+        // apply stencil
+        if (order == 2) {
             gpuStencilShared<side, 2><<<blocks, threads>>>(
 	        next_grid.dGrid_, curr_grid.dGrid_, gx, gy, xcfl, ycfl);
         }
 
-	else if (params.order() == 4) {
+	else if (order == 4) {
             gpuStencilShared<side, 4><<<blocks, threads>>>(
                 next_grid.dGrid_, curr_grid.dGrid_, gx, gy, xcfl, ycfl);
         }
 
-	else if (params.order() == 8) {
+	else if (order == 8) {
             gpuStencilShared<side, 8><<<blocks, threads>>>(
                 next_grid.dGrid_, curr_grid.dGrid_, gx, gy, xcfl, ycfl );
         }

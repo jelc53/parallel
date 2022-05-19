@@ -226,18 +226,17 @@ at order 8 for 400 iterations.
 \begin{verbatim}
 Output from main
 ----------------
-Order: 2, 1024x1024, 400 iterations
-                     time (ms)     GBytes/sec
-            CPU        169.085         59.534
-         Global        606.715        16.5915
-          Block        10.1822        988.616
-         Shared        1.20602        8346.76
-There were 1048576 total locations where there was a difference between the cpu and gpu
+Order: 8, 4096x4096, 100 iterations
+                        time (ms)     GBytes/sec
+            CPU           2661.73        45.3824
+            Global        50.2889        2402.04
+            Block         37.3118        3237.48
+            Shared        41.8833        2884.11
 
-                         L2Ref           LInf          L2Err
-         Global         0.2477              0              0
-          Block         0.2477              0              0
-         Shared         0.2477       0.507062       0.253675
+                            L2Ref           LInf          L2Err
+            Global       0.447065              0              0
+            Block        0.447065              0              0
+            Shared       0.447065              0              0
 \end{verbatim}
 
 
