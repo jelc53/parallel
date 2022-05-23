@@ -8,8 +8,12 @@
 #include "utils/common.h"
 #include "utils/gpu_util.h"
 
-int myGEMM(nn_real* A, nn_real* B, nn_real* C, nn_real* alpha, nn_real* beta, int M, int N,
-           int K);
+
+int myGEMM(nn_real* A, nn_real* B, nn_real* C, nn_real* alpha, nn_real* beta, 
+		int M, int N, int K);
+
+__global__ void kernelGEMM(nn_real* A, nn_real* B, nn_real* C, nn_real alpha, nn_real beta, 
+		int M, int N, int K);
 
 // TODO
 // Add additional function declarations
