@@ -10,7 +10,7 @@ Routine to perform an in-place GEMM operation, i.e., C := alpha*A*B + beta*C
 */
 
 /*
-  GEMM: Matrix-Multiplication Kernel (v01)
+  GEMM: Inplace Matrix-Multiplication (v01)
 
   Simple implementation that tackles sub-blocks of the matrix and computes 
   one value per thread. Does not make use of shaed memory.
@@ -29,18 +29,12 @@ void kernelGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B,
     if (row < M && col < N) 
     {
         for (int e = 0; e < K; ++e) 
-	    Cvalue += A[row * K + e] * B[e * N + col];	
+		Cvalue += A[row + M*e] * B[e +  K*col];	
         
-	C[row * N + col] = alpha*Cvalue + beta*C[row * N + col];
+	C[row + col*M] = alpha*Cvalue + beta*C[row + col*M];
     }
 }
 
-/*
-  GEMM: Caller Function (v01)
-  
-  Simple implementation that tackles sub-blocks of the matrix and computes 
-  one value per thread. Does not make use of shaed memory.
-*/
 int myGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B,
            nn_real* __restrict__ C, nn_real* alpha, nn_real* beta,
            int M, int N, int K) {
