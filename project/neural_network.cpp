@@ -1,8 +1,13 @@
 #include "utils/neural_network.h"
+#include "utils/tests.h"
 
 #include <cuda_runtime.h>
 #include <helper_cuda.h>
 #include <helper_functions.h>
+#include <cstring>
+#include <string>
+#include <iostream>
+#include <vector>
 
 #include <armadillo>
 
@@ -156,7 +161,25 @@ void train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
       struct cache bpcache;
       feedforward(nn, X_batch, bpcache);
       #if DEBUG_FFORWARD
-          // do stuff ...
+          std::string filename = "debug_ff.out";
+          std::ofstream ofs(filename.c_str());
+          NeuralNetwork nn2(nn.H);
+	  nn2.W = nn.W; nn2.b = nn.b;
+	  std::vector<nn_real> errors_w;
+	  int error = 0;
+          DeviceNNet dnn(nn2, X, y);
+          dnn.toGPU(nn2, X, y);
+          parallel_feedforward(dnn.d_H, 
+		      dnn.d_W[0], dnn.d_W[1], 
+		      dnn.d_b[0], dnn.d_b[1], 
+		      dnn.d_z[0], dnn.d_z[1], 
+		      dnn.d_a[0], dnn.d_a[1], 
+		      dnn.d_X, dnn.d_yc, dnn.d_y, 
+		      batch_size); 
+	  dnn.fromGPU(nn2);
+	  error += checkErrors(nn2.W[0], nn.W[0], ofs, errors_w);
+	  ofs.close();
+	  std::cout << "Error in feed forward: " << error << std::endl;
       #endif
 
       struct grads bpgrads;
@@ -230,46 +253,13 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
      returning from the function. */
  
   /* TODO Allocate memory before the iterations */
-  // -- memory management for nnet
-  int* d_H; nn_real* d_b[2]; nn_real* d_W[2];
+  DeviceNNet dnn(nn, X, y);
+  dnn.toGPU(nn, X, y);
 
-  cudaMalloc(&d_H, sizeof(int) * nn.H.size());
-  cudaMalloc(&d_b[0], sizeof(nn_real) * nn.H[1]);
-  cudaMalloc(&d_b[1], sizeof(nn_real) * nn.H[2]);
-  cudaMalloc(&d_W[0], sizeof(nn_real) * nn.H[0]*nn.H[1]); 
-  cudaMalloc(&d_W[1], sizeof(nn_real) * nn.H[1]*nn.H[2]);
+  // -- other temporary variables
+  nn_real* d_diff;
 
-  cudaMemcpy(d_H, &nn.H[0], sizeof(int) * nn.H.size(), cudaMemcpyHostToDevice); 
-  cudaMemcpy(d_b[0], nn.b[0].memptr(), sizeof(nn_real) * nn.H[1], cudaMemcpyHostToDevice); 
-  cudaMemcpy(d_b[1], nn.b[1].memptr(), sizeof(nn_real) * nn.H[2], cudaMemcpyHostToDevice); 
-  cudaMemcpy(d_W[0], nn.W[0].memptr(), sizeof(nn_real) * nn.H[0]*nn.H[1], cudaMemcpyHostToDevice); 
-  cudaMemcpy(d_W[1], nn.W[1].memptr(), sizeof(nn_real) * nn.H[1]*nn.H[2], cudaMemcpyHostToDevice); 
-  
-  // -- memory management for data (X, y)
-  nn_real* d_X; nn_real* d_y;
-  
-  cudaMalloc(&d_X, sizeof(nn_real) * X.n_rows * batch_size);
-  cudaMalloc(&d_y, sizeof(nn_real) * y.n_rows * batch_size);
-  
-  cudaMemcpy(d_X, X.memptr(), sizeof(nn_real) * X.n_rows * batch_size, cudaMemcpyHostToDevice); 
-  cudaMemcpy(d_y, y.memptr(), sizeof(nn_real) * y.n_rows * batch_size, cudaMemcpyHostToDevice); 
-
-  // -- memory management for cache (z, a, yc)  
-  nn_real* d_z[2]; nn_real* d_a[2]; nn_real* d_yc;
-  
-  cudaMalloc(&d_z[0], sizeof(nn_real) * nn.H[1]);
-  cudaMalloc(&d_z[1], sizeof(nn_real) * nn.H[2]);
-  cudaMalloc(&d_a[0], sizeof(nn_real) * nn.H[1]);
-  cudaMalloc(&d_a[1], sizeof(nn_real) * nn.H[2]);
-  cudaMalloc(&d_yc, sizeof(nn_real) * nn.H[2]);
-
-  // -- memory management for gradients (dW, db)
-  nn_real* d_dW[2]; nn_real* d_db[2];
-
-  cudaMalloc(&d_dW[0], sizeof(nn_real) * nn.H[1]);
-  cudaMalloc(&d_dW[1], sizeof(nn_real) * nn.H[2]);
-  cudaMalloc(&d_db[0], sizeof(nn_real) * nn.H[1]);
-  cudaMalloc(&d_db[1], sizeof(nn_real) * nn.H[2]);
+  cudaMalloc(&d_diff, sizeof(nn_real) * y.n_rows*batch_size);
 
   /* iter is a variable used to manage debugging. It increments in the inner
      loop and therefore goes from 0 to epochs*num_batches */
@@ -289,12 +279,19 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
        */
       
       // feed forward
-      parallel_feedforward(d_H, d_W[0], d_W[1], d_b[0], d_b[1], d_z[0], d_z[1], 
-		      d_a[0], d_a[1], d_yc, d_X, d_y, batch_size); 
-
+      parallel_feedforward(dnn.d_H, 
+		      dnn.d_W[0], dnn.d_W[1], 
+		      dnn.d_b[0], dnn.d_b[1], 
+		      dnn.d_z[0], dnn.d_z[1], 
+		      dnn.d_a[0], dnn.d_a[1], 
+		      dnn.d_X, dnn.d_yc, dnn.d_y, 
+		      batch_size); 
+/*
       // back propagation
-      
-
+      parallel_backprop(d_H, d_W[0], d_W[1], d_b[0], d_b[1], d_z[0], d_z[1], 
+		      d_a[0], d_a[1], d_dW[0], d_dW[1], d_db[0], d_db[1], 
+		      d_X, d_yc, d_y, d_diff, reg, batch_size); 
+      */
       // gradient descent
 
 
@@ -323,15 +320,9 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
   }
 
   // TODO Copy data back to the CPU
-  cudaMemcpy(nn.b[0].memptr(), d_b[0], sizeof(nn_real) * nn.H[1], cudaMemcpyDeviceToHost);
-  cudaMemcpy(nn.b[1].memptr(), d_b[1], sizeof(nn_real) * nn.H[2], cudaMemcpyDeviceToHost);
-  cudaMemcpy(nn.W[0].memptr(), d_W[0], sizeof(nn_real) * nn.H[0]*nn.H[1], cudaMemcpyDeviceToHost);
-  cudaMemcpy(nn.W[1].memptr(), d_W[1], sizeof(nn_real) * nn.H[1]*nn.H[2], cudaMemcpyDeviceToHost);
-
+  dnn.fromGPU(nn);
+  
   // TODO Free memory
-  cudaFree(d_H); cudaFree(d_W); cudaFree(d_b); 
-  cudaFree(d_z); cudaFree(d_a); cudaFree(d_yc);
-  cudaFree(d_dW); cudaFree(d_db);
-  cudaFree(d_X); cudaFree(d_y); 
+  // Note, should now happen when dnn destructor called
 
 }

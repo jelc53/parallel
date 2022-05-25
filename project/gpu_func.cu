@@ -2,6 +2,7 @@
 #include <cuda_runtime.h>
 #include <helper_cuda.h>
 #include <helper_functions.h>
+#include <armadillo>
 #include <iostream>
 #include "cublas_v2.h"
 
@@ -139,6 +140,37 @@ int callOutRepmatGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B,
     return 0;
 }
 
+/*
+  Matrix - materix addition / subtraction: C = alpha*A + beta*B 
+*/
+__global__ 
+void kernelMatAddSubtract(nn_real* A, nn_real* B, nn_real* C,
+		nn_real alpha, nn_real beta, 
+	        int M, int N) 
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < M && col < N) 
+	C[row + col*M] = alpha*A[row + col*M] + beta*B[row + col*M];
+}
+
+int callMatAddSubtract(nn_real* A, nn_real* B, nn_real* C,
+	   nn_real alpha, nn_real beta,
+           int M, int N) 
+{
+    // Thread block, grid dimensions
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    int dimGrid_x = (N + dimBlock.x - 1) / dimBlock.x;
+    int dimGrid_y = (M + dimBlock.y - 1) / dimBlock.y;
+    dim3 dimGrid(dimGrid_x, dimGrid_y);
+
+    // Launch matrix-multiplication kernel
+    kernelMatAddSubtract<<<dimGrid, dimBlock>>>(A, B, C, alpha, beta, M, N); 
+
+    return 0;
+}
+
 
 /*
   Sigmoid function implemented for matrix
@@ -202,32 +234,120 @@ int callSoftmax(nn_real* A, nn_real* B, int M, int N)
 /* 
   Helper functions for neural networks
  */
-void parallel_feedforward(int* H, nn_real* W1, nn_real* W2, 
-		nn_real* b1, nn_real* b2, nn_real* z1, nn_real* z2, 
-		nn_real* a1, nn_real* a2, nn_real* yc,
-		nn_real* X, nn_real* y, int N)
+void parallel_feedforward(int* H, 
+		nn_real* W1, nn_real* W2, 
+		nn_real* b1, nn_real* b2, 
+		nn_real* z1, nn_real* z2, 
+		nn_real* a1, nn_real* a2, 
+		nn_real* X, nn_real* yc, nn_real* y, 
+		int batch_size)
 {
     // compute z1 with gemm
-    callOutRepmatGEMM(W1, X, b1, z1, 1, 1, H[1], N, H[0]);
+    callOutRepmatGEMM(W1, X, b1, z1, 1, 1, H[1], batch_size, H[0]);
     
     // compute a1 with sigmoid
-    callSigmoid(z1, a1, H[1], N);
+    callSigmoid(z1, a1, H[1], batch_size);
 
     // compute z2 with gemm
-    callOutRepmatGEMM(W1, X, b1, z1, 1, 1, H[2], N, H[1]);
+    callOutRepmatGEMM(W1, X, b1, z1, 1, 1, H[2], batch_size, H[1]);
 
     // compute a2 with softmax
-    callSoftmax(z2, a2, H[2], N);
+    callSoftmax(z2, a2, H[2], batch_size);
 
     // update yc from a2
     yc = a2; 
 
 }
 
+void parallel_backprop(int* H, 
+		nn_real* W1, nn_real* W2,
+		nn_real* b1, nn_real* b2,
+		nn_real* z1, nn_real* z2,
+		nn_real* a1, nn_real* a2, 
+	        nn_real* dW1, nn_real* dW2,
+	        nn_real* db1, nn_real* db2,	
+	        nn_real* X, nn_real* yc, nn_real* y, 
+		nn_real* diff, nn_real reg, int batch_size) 
+{
+    int N = batch_size;
+    
+    // compute diff with mat-mat subtraction
+    callMatAddSubtract(yc, y, diff, (1.0 / N), -(1.0 / N), H[2], N); 	
+
+    // compute gradients dW1, db1
+    //callMatrixTranspose();
+
+}
 
 
+/*
+  Device Neural Network class methods 
+ */
+// Constructor: allocate memory on device
+DeviceNNet::DeviceNNet(NeuralNetwork& nn, 
+		       const arma::Mat<nn_real>& X, 
+		       const arma::Mat<nn_real>& y) 
+	: layers(nn.num_layers), batch_size(y.n_cols) {
 
+  // memory management for nnet
+  cudaMalloc(&d_H, sizeof(int) * nn.H.size());
+  cudaMalloc(&d_b[0], sizeof(nn_real) * nn.H[1]);
+  cudaMalloc(&d_b[1], sizeof(nn_real) * nn.H[2]);
+  cudaMalloc(&d_W[0], sizeof(nn_real) * nn.H[0]*nn.H[1]); 
+  cudaMalloc(&d_W[1], sizeof(nn_real) * nn.H[1]*nn.H[2]);
 
+  // memory management for data (X, y)
+  cudaMalloc(&d_X, sizeof(nn_real) * X.n_rows * batch_size);
+  cudaMalloc(&d_y, sizeof(nn_real) * y.n_rows * batch_size);
+  
+  // memory management for cache (z, a, yc)  
+  cudaMalloc(&d_z[0], sizeof(nn_real) * nn.H[1]);
+  cudaMalloc(&d_z[1], sizeof(nn_real) * nn.H[2]);
+  cudaMalloc(&d_a[0], sizeof(nn_real) * nn.H[1]);
+  cudaMalloc(&d_a[1], sizeof(nn_real) * nn.H[2]);
+  cudaMalloc(&d_yc, sizeof(nn_real) * y.n_rows*batch_size);
+
+  // memory management for gradients (dW, db)
+  cudaMalloc(&d_dW[0], sizeof(nn_real) * nn.H[1]);
+  cudaMalloc(&d_dW[1], sizeof(nn_real) * nn.H[2]);
+  cudaMalloc(&d_db[0], sizeof(nn_real) * nn.H[1]);
+  cudaMalloc(&d_db[1], sizeof(nn_real) * nn.H[2]);
+
+}
+
+// Free memory on device
+DeviceNNet::~DeviceNNet() {
+  
+  cudaFree(d_H); cudaFree(d_W); cudaFree(d_b); 
+  cudaFree(d_z); cudaFree(d_a); cudaFree(d_yc);
+  cudaFree(d_dW); cudaFree(d_db);
+  cudaFree(d_X); cudaFree(d_y); 
+}
+
+// Copy data from CPU to the GPU
+void DeviceNNet::toGPU(NeuralNetwork& nn, 
+		       const arma::Mat<nn_real>& X, 
+		       const arma::Mat<nn_real>& y) {
+   
+  cudaMemcpy(d_H, &nn.H[0], sizeof(int) * nn.H.size(), cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_b[0], nn.b[0].memptr(), sizeof(nn_real) * nn.H[1], cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_b[1], nn.b[1].memptr(), sizeof(nn_real) * nn.H[2], cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_W[0], nn.W[0].memptr(), sizeof(nn_real) * nn.H[0]*nn.H[1], cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_W[1], nn.W[1].memptr(), sizeof(nn_real) * nn.H[1]*nn.H[2], cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_X, X.memptr(), sizeof(nn_real) * X.n_rows * batch_size, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_y, y.memptr(), sizeof(nn_real) * y.n_rows * batch_size, cudaMemcpyHostToDevice); 
+
+}
+
+// Copy data back from GPU to the CPU
+void DeviceNNet::fromGPU(NeuralNetwork& nn) {
+
+  cudaMemcpy(nn.b[0].memptr(), d_b[0], sizeof(nn_real) * nn.H[1], cudaMemcpyDeviceToHost);
+  cudaMemcpy(nn.b[1].memptr(), d_b[1], sizeof(nn_real) * nn.H[2], cudaMemcpyDeviceToHost);
+  cudaMemcpy(nn.W[0].memptr(), d_W[0], sizeof(nn_real) * nn.H[0]*nn.H[1], cudaMemcpyDeviceToHost);
+  cudaMemcpy(nn.W[1].memptr(), d_W[1], sizeof(nn_real) * nn.H[1]*nn.H[2], cudaMemcpyDeviceToHost);
+
+} 
 
 
 
