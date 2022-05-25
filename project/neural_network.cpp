@@ -10,6 +10,8 @@
 #include "gpu_func.h"
 #include "mpi.h"
 
+#define DEBUG_FFORWARD 0
+
 #define MPI_SAFE_CALL(call)                                                  \
   do {                                                                       \
     int err = call;                                                          \
@@ -153,6 +155,9 @@ void train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
 
       struct cache bpcache;
       feedforward(nn, X_batch, bpcache);
+      #if DEBUG_FFORWARD
+          // do stuff ...
+      #endif
 
       struct grads bpgrads;
       backprop(nn, y_batch, reg, bpcache, bpgrads);
@@ -223,12 +228,49 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
      array memory space and store the elements in a row major way. Remember to
      update the Armadillo matrices in NeuralNetwork &nn of rank 0 before
      returning from the function. */
+ 
+  /* TODO Allocate memory before the iterations */
+  // -- memory management for nnet
+  int* d_H; nn_real* d_b[2]; nn_real* d_W[2];
 
-  // TODO
+  cudaMalloc(&d_H, sizeof(int) * nn.H.size());
+  cudaMalloc(&d_b[0], sizeof(nn_real) * nn.H[1]);
+  cudaMalloc(&d_b[1], sizeof(nn_real) * nn.H[2]);
+  cudaMalloc(&d_W[0], sizeof(nn_real) * nn.H[0]*nn.H[1]); 
+  cudaMalloc(&d_W[1], sizeof(nn_real) * nn.H[1]*nn.H[2]);
 
-  /* allocate memory before the iterations */
-  // Data sets
+  cudaMemcpy(d_H, &nn.H[0], sizeof(int) * nn.H.size(), cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_b[0], nn.b[0].memptr(), sizeof(nn_real) * nn.H[1], cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_b[1], nn.b[1].memptr(), sizeof(nn_real) * nn.H[2], cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_W[0], nn.W[0].memptr(), sizeof(nn_real) * nn.H[0]*nn.H[1], cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_W[1], nn.W[1].memptr(), sizeof(nn_real) * nn.H[1]*nn.H[2], cudaMemcpyHostToDevice); 
   
+  // -- memory management for data (X, y)
+  nn_real* d_X; nn_real* d_y;
+  
+  cudaMalloc(&d_X, sizeof(nn_real) * X.n_rows * batch_size);
+  cudaMalloc(&d_y, sizeof(nn_real) * y.n_rows * batch_size);
+  
+  cudaMemcpy(d_X, X.memptr(), sizeof(nn_real) * X.n_rows * batch_size, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_y, y.memptr(), sizeof(nn_real) * y.n_rows * batch_size, cudaMemcpyHostToDevice); 
+
+  // -- memory management for cache (z, a, yc)  
+  nn_real* d_z[2]; nn_real* d_a[2]; nn_real* d_yc;
+  
+  cudaMalloc(&d_z[0], sizeof(nn_real) * nn.H[1]);
+  cudaMalloc(&d_z[1], sizeof(nn_real) * nn.H[2]);
+  cudaMalloc(&d_a[0], sizeof(nn_real) * nn.H[1]);
+  cudaMalloc(&d_a[1], sizeof(nn_real) * nn.H[2]);
+  cudaMalloc(&d_yc, sizeof(nn_real) * nn.H[2]);
+
+  // -- memory management for gradients (dW, db)
+  nn_real* d_dW[2]; nn_real* d_db[2];
+
+  cudaMalloc(&d_dW[0], sizeof(nn_real) * nn.H[1]);
+  cudaMalloc(&d_dW[1], sizeof(nn_real) * nn.H[2]);
+  cudaMalloc(&d_db[0], sizeof(nn_real) * nn.H[1]);
+  cudaMalloc(&d_db[1], sizeof(nn_real) * nn.H[2]);
+
   /* iter is a variable used to manage debugging. It increments in the inner
      loop and therefore goes from 0 to epochs*num_batches */
   int iter = 0;
@@ -237,7 +279,7 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
     int num_batches = (N + batch_size - 1) / batch_size;
     for (int batch = 0; batch < num_batches; ++batch) {
       /*
-       * Possible Implementation:
+       * TODO Possible Implementation:
        * 1. subdivide input batch of images and `MPI_scatter()' to each MPI node
        * 2. compute each sub-batch of images' contribution to network
        * coefficient updates
@@ -246,7 +288,17 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
        * 4. update local network coefficient at each node
        */
       
-      // TODO
+      // feed forward
+      parallel_feedforward(d_H, d_W[0], d_W[1], d_b[0], d_b[1], d_z[0], d_z[1], 
+		      d_a[0], d_a[1], d_yc, d_X, d_y, batch_size); 
+
+      // back propagation
+      
+
+      // gradient descent
+
+
+
 
       // +-*=+-*=+-*=+-*=+-*=+-*=+-*=+-*=+*-=+-*=+*-=+-*=+-*=+-*=+-*=+-*= //
       //                    POST-PROCESS OPTIONS                          //
@@ -270,9 +322,16 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
     }
   }
 
-  // TODO
-  // Copy data back to the CPU
+  // TODO Copy data back to the CPU
+  cudaMemcpy(nn.b[0].memptr(), d_b[0], sizeof(nn_real) * nn.H[1], cudaMemcpyDeviceToHost);
+  cudaMemcpy(nn.b[1].memptr(), d_b[1], sizeof(nn_real) * nn.H[2], cudaMemcpyDeviceToHost);
+  cudaMemcpy(nn.W[0].memptr(), d_W[0], sizeof(nn_real) * nn.H[0]*nn.H[1], cudaMemcpyDeviceToHost);
+  cudaMemcpy(nn.W[1].memptr(), d_W[1], sizeof(nn_real) * nn.H[1]*nn.H[2], cudaMemcpyDeviceToHost);
 
-  // TODO
-  // Free memory
+  // TODO Free memory
+  cudaFree(d_H); cudaFree(d_W); cudaFree(d_b); 
+  cudaFree(d_z); cudaFree(d_a); cudaFree(d_yc);
+  cudaFree(d_dW); cudaFree(d_db);
+  cudaFree(d_X); cudaFree(d_y); 
+
 }

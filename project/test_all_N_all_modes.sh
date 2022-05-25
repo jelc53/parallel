@@ -28,10 +28,10 @@ echo ----------------
 # Choose single or double to select the precision
 TAG=single
 
-# Edit the lines below
-# CPU_SAVE_DIR=/home/XXX
-# OUTPUT_DIR=/home/XXX/Outputs_$TAG
-# EXE=/home/XXX/main
+# TODO: Edit the lines below
+CPU_SAVE_DIR=/home/jelc/cme213-jelc53/project/results/
+OUTPUT_DIR=/home/jelc/cme213-jelc53/project/results/Outputs_$TAG
+EXE=/home/jelc/cme213-para/project/main
 
 DEBUG_DIR=Debug_$TAG
 MAKEFILE_NAME=Makefile_$TAG
