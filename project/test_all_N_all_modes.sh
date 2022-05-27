@@ -29,8 +29,8 @@ echo ----------------
 TAG=single
 
 # TODO: Edit the lines below
-CPU_SAVE_DIR=/home/jelc/cme213-jelc53/project/results/
-OUTPUT_DIR=/home/jelc/cme213-jelc53/project/results/Outputs_$TAG
+CPU_SAVE_DIR=/home/jelc/cme213-para/project/results/
+OUTPUT_DIR=/home/jelc/cme213-para/project/results/Outputs_$TAG
 EXE=/home/jelc/cme213-para/project/main
 
 DEBUG_DIR=Debug_$TAG

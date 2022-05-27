@@ -1,12 +1,152 @@
+#include "utils/neural_network.h"
+#include "utils/tests.h"
 #include "gpu_func.h"
+
+#include  <stdio.h>
 #include <cuda_runtime.h>
 #include <helper_cuda.h>
 #include <helper_functions.h>
-#include <armadillo>
-#include <iostream>
+
 #include "cublas_v2.h"
 
 #define BLOCK_SIZE 32
+
+/*
+  Device class method implementations
+ */
+ // Device struct for cache
+d_cache::d_cache(int* dims)
+	: H0(dims[0]), H1(dims[1]), H2(dims[2]), batch_size(dims[3])
+{  
+  // memory management for cache  
+  cudaMalloc(&d_z[0], sizeof(nn_real) * H1*batch_size);
+  check_launch("memcpy d_10");
+  
+  cudaMalloc(&d_z[1], sizeof(nn_real) * H2*batch_size);
+  check_launch("memcpy d_z1");
+  
+  cudaMalloc(&d_a[0], sizeof(nn_real) * H1*batch_size);
+  check_launch("memcpy d_a0");
+  
+  cudaMalloc(&d_a[1], sizeof(nn_real) * H2*batch_size);
+  check_launch("memcpy d_a1");
+  
+  cudaMalloc(&d_yc, sizeof(nn_real) * H2*batch_size);
+  check_launch("memcpy d_yc");
+
+  // memory management for data (X, y)
+  cudaMalloc(&d_X, sizeof(nn_real) * H0*batch_size);
+  check_launch("memcpy d_X");
+  
+  cudaMalloc(&d_y, sizeof(nn_real) * H2*batch_size);
+  check_launch("memcpy d_y");
+  
+  // memory management for intermediate variables
+  cudaMalloc(&d_diff, sizeof(nn_real) * H2*batch_size);
+  check_launch("memcpy d_diff");
+
+  cudaMalloc(&d_a0T, sizeof(nn_real) * H1*batch_size); 
+  check_launch("memcpy d_a0T");
+
+  cudaMalloc(&d_W1T, sizeof(nn_real) * H0*H1); 
+  check_launch("memcpy d_W1T");
+
+  cudaMalloc(&d_XT, sizeof(nn_real) * H0*batch_size); 
+  check_launch("memcpy d_XT");
+
+  cudaMalloc(&d_da1, sizeof(nn_real) * H1*batch_size);
+  check_launch("memcpy d_da1");
+ 
+  cudaMalloc(&d_dz1, sizeof(nn_real) * H1*batch_size);
+  check_launch("memcpy d_dz1");
+
+  cudaMalloc(&d_1ma0, sizeof(nn_real) * H1*batch_size);
+  check_launch("memcpy d_1ma0");
+}
+
+d_cache::~d_cache() {
+
+  cudaFree(d_z); cudaFree(d_a); cudaFree(d_yc);
+  cudaFree(d_diff); cudaFree(d_da1); cudaFree(d_dz1);
+}
+
+void d_cache::toGPU(cache& bpcache) {
+  cudaMemcpy(d_z[0], bpcache.z[0].memptr(), sizeof(nn_real) * H1*batch_size, cudaMemcpyHostToDevice); 
+  check_launch("memcpy d_a0");
+
+  cudaMemcpy(d_z[1], bpcache.z[1].memptr(), sizeof(nn_real) * H2*batch_size, cudaMemcpyHostToDevice); 
+  check_launch("memcpy d_a1");
+
+  cudaMemcpy(d_a[0], bpcache.a[0].memptr(), sizeof(nn_real) * H1*batch_size, cudaMemcpyHostToDevice); 
+  check_launch("memcpy d_a0");
+
+  cudaMemcpy(d_a[1], bpcache.a[1].memptr(), sizeof(nn_real) * H2*batch_size, cudaMemcpyHostToDevice); 
+  check_launch("memcpy d_a1");
+
+  cudaMemcpy(d_yc, bpcache.yc.memptr(), sizeof(nn_real) * H2*batch_size, cudaMemcpyHostToDevice); 
+  check_launch("memcpy d_yc");
+
+}
+
+void d_cache::fromGPU(cache& bpcache) {
+    
+  cudaMemcpy(bpcache.z[0].memptr(), d_z[0], sizeof(nn_real) * H1*batch_size, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.z[1].memptr(), d_z[1], sizeof(nn_real) * H2*batch_size, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.a[0].memptr(), d_a[0], sizeof(nn_real) * H1*batch_size, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.a[1].memptr(), d_a[1], sizeof(nn_real) * H2*batch_size, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.yc.memptr(), d_yc, sizeof(nn_real) * H2*batch_size, cudaMemcpyDeviceToHost);
+
+}
+
+
+// Device gradient struct methods
+d_grads::d_grads(int* dims) 
+    : H0(dims[0]), H1(dims[1]), H2(dims[2]), batch_size(dims[3])
+{
+  // memory management for gradients (dW, db)
+  cudaMalloc(&d_dW[0], sizeof(nn_real) * H0*H1);
+  check_launch("memcpy d_dW0");
+  
+  cudaMalloc(&d_dW[1], sizeof(nn_real) * H1*H2);
+  check_launch("memcpy d_dW1");
+  
+  cudaMalloc(&d_db[0], sizeof(nn_real) * H1);
+  check_launch("memcpy d_db0");
+  
+  cudaMalloc(&d_db[1], sizeof(nn_real) * H2);
+  check_launch("memcpy d_db1");
+
+}
+
+d_grads::~d_grads() {
+  cudaFree(d_dW); cudaFree(d_db);
+}
+
+void d_grads::toGPU(grads& bpgrads) {
+  cudaMemcpy(d_dW[0], bpgrads.dW[0].memptr(), sizeof(nn_real) * H0*H1, cudaMemcpyHostToDevice); 
+  check_launch("memcpy d_dW0");
+
+  cudaMemcpy(d_dW[1], bpgrads.dW[1].memptr(), sizeof(nn_real) * H1*H2, cudaMemcpyHostToDevice); 
+  check_launch("memcpy d_dW1");
+
+  cudaMemcpy(d_db[0], bpgrads.db[0].memptr(), sizeof(nn_real) * H1, cudaMemcpyHostToDevice); 
+  check_launch("memcpy d_db0");
+
+  cudaMemcpy(d_db[1], bpgrads.db[1].memptr(), sizeof(nn_real) * H2, cudaMemcpyHostToDevice); 
+  check_launch("memcpy d_db1");
+
+}
+
+void d_grads::fromGPU(grads& bpgrads) {
+
+  cudaMemcpy(bpgrads.dW[0].memptr(), d_dW[0], sizeof(nn_real) * H0*H1, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpgrads.dW[1].memptr(), d_dW[1], sizeof(nn_real) * H1*H2, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpgrads.db[0].memptr(), d_db[0], sizeof(nn_real) * H1, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpgrads.db[1].memptr(), d_db[1], sizeof(nn_real) * H2, cudaMemcpyDeviceToHost);
+
+}
+
+
 
 /*
   Routine to perform an in-place GEMM operation, i.e., C := alpha*A*B + beta*C
@@ -51,17 +191,14 @@ int myGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B,
 }
 
 
-/*
-  Routine to perform an out-of-place GEMM operation, i.e., D := alpha*A*B + beta*C
-  
-  Simple implementation that tackles sub-blocks of the matrix and computes 
-  one value per thread. Does not make use of shaed memory.
-*/
+/* GEMM out-of-place: D := alpha*A*B + beta*C */
 __global__ 
-void kernelOutGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B, 
-		nn_real* __restrict__ C, nn_real* __restrict__ D,
-		nn_real alpha, nn_real beta, 
-	        int M, int N, int K) 
+void kernel_oop_gemm(nn_real* __restrict__ A, 
+                     nn_real* __restrict__ B, 
+		             nn_real* __restrict__ C, 
+                     nn_real* __restrict__ D,
+                     nn_real alpha, nn_real beta, 
+                     int M, int N, int K) 
 {
     // Each thread computes one element of C
     // by accumulating results into Cvalue
@@ -78,10 +215,12 @@ void kernelOutGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B,
     }
 }
 
-int callOutGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B,
-           nn_real* __restrict__ C, nn_real* __restrict__ D,
-	   nn_real* alpha, nn_real* beta,
-           int M, int N, int K) 
+int caller_oop_gemm(nn_real* __restrict__ A, 
+                    nn_real* __restrict__ B,
+                    nn_real* __restrict__ C, 
+                    nn_real* __restrict__ D,
+                    nn_real alpha, nn_real beta,
+                    int M, int N, int K) 
 {
     // Thread block, grid dimensions
     dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
@@ -90,23 +229,64 @@ int callOutGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B,
     dim3 dimGrid(dimGrid_x, dimGrid_y);
 
     // Launch matrix-multiplication kernel
-    kernelOutGEMM<<<dimGrid, dimBlock>>>(A, B, C, D, *alpha, *beta, M, N, K); 
-
+    kernel_oop_gemm<<<dimGrid, dimBlock>>>(A, B, C, D, 
+                                           alpha, beta, 
+                                           M, N, K); 
     return 0;
 }
 
 
-/*
-  Routine to perform an out-of-place GEMM operation, i.e., D := alpha*A*B + beta*[ccc]
-  
-  Simple implementation that tackles sub-blocks of the matrix and computes 
-  one value per thread. Does not make use of shared memory.
-*/
+/* Simple matrix multiplication: C := (alpha)*A*B */
 __global__ 
-void kernelOutRepmatGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B, 
-		nn_real* __restrict__ c, nn_real* __restrict__ D,
-		nn_real alpha, nn_real beta, 
-	        int M, int N, int K) 
+void kernel_matrix_multiply(nn_real* __restrict__ A, 
+                            nn_real* __restrict__ B, 
+                            nn_real* __restrict__ C, 
+                            nn_real alpha, 
+                            int M, int N, int K) 
+{
+    // Each thread computes one element of C
+    // by accumulating results into Cvalue
+    nn_real Cvalue = 0;
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < M && col < N) 
+    {
+        for (int e = 0; e < K; ++e) 
+		Cvalue += A[row + M*e] * B[e +  K*col];	
+        
+	C[row + col*M] = alpha*Cvalue;
+    }
+}
+
+int caller_matrix_multiply(nn_real* __restrict__ A, 
+                           nn_real* __restrict__ B,
+                           nn_real* __restrict__ C, 
+                           nn_real alpha, 
+                           int M, int N, int K) 
+{
+    // Thread block, grid dimensions
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    int dimGrid_x = (N + dimBlock.x - 1) / dimBlock.x;
+    int dimGrid_y = (M + dimBlock.y - 1) / dimBlock.y;
+    dim3 dimGrid(dimGrid_x, dimGrid_y);
+
+    // Launch matrix-multiplication kernel
+    kernel_matrix_multiply<<<dimGrid, dimBlock>>>(A, B, C,  
+                                                  alpha,  
+                                                  M, N, K); 
+    return 0;
+}
+
+
+/* GEMM RepMat: D := alpha*A*B + beta*[ccc] */
+__global__ 
+void kernel_linear_transform(nn_real* __restrict__ A, 
+                             nn_real* __restrict__ B, 
+		                     nn_real* __restrict__ c, 
+                             nn_real* __restrict__ D,
+                             nn_real alpha, nn_real beta, 
+                             int M, int N, int K) 
 {
     // Each thread computes one element of C
     // by accumulating results into Cvalue
@@ -123,41 +303,44 @@ void kernelOutRepmatGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B,
     }
 }
 
-int callOutRepmatGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B,
-           nn_real* __restrict__ c, nn_real* __restrict__ D,
-	   nn_real alpha, nn_real beta,
-           int M, int N, int K) 
+int caller_linear_transform(nn_real* __restrict__ A, 
+                            nn_real* __restrict__ B,
+                            nn_real* __restrict__ c, 
+                            nn_real* __restrict__ D,
+	                        nn_real alpha, nn_real beta,
+                            int M, int N, int K) 
 {
-    // Thread block, grid dimensions
     dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
     int dimGrid_x = (N + dimBlock.x - 1) / dimBlock.x;
     int dimGrid_y = (M + dimBlock.y - 1) / dimBlock.y;
     dim3 dimGrid(dimGrid_x, dimGrid_y);
 
-    // Launch matrix-multiplication kernel
-    kernelOutRepmatGEMM<<<dimGrid, dimBlock>>>(A, B, c, D, alpha, beta, M, N, K); 
+    kernel_linear_transform<<<dimGrid, dimBlock>>>(A, B, c, D, 
+                                                   alpha, beta, 
+                                                   M, N, K); 
 
     return 0;
 }
 
-/*
-  Matrix - materix addition / subtraction: C = alpha*A + beta*B 
-*/
+
+/* Matrix addition inplace: A += alpha*B */
 __global__ 
-void kernelMatAddSubtract(nn_real* A, nn_real* B, nn_real* C,
-		nn_real alpha, nn_real beta, 
-	        int M, int N) 
+void kernel_matrix_addition(nn_real* A, 
+						    nn_real* B, 
+						    nn_real alpha, 
+						    int M, int N) 
 {
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (row < M && col < N) 
-	C[row + col*M] = alpha*A[row + col*M] + beta*B[row + col*M];
+	    A[row + col*M] += alpha*B[row + col*M];
 }
 
-int callMatAddSubtract(nn_real* A, nn_real* B, nn_real* C,
-	   nn_real alpha, nn_real beta,
-           int M, int N) 
+int caller_matrix_addition(nn_real* A, 
+						   nn_real* B, 
+						   nn_real alpha, 
+						   int M, int N) 
 {
     // Thread block, grid dimensions
     dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
@@ -166,26 +349,36 @@ int callMatAddSubtract(nn_real* A, nn_real* B, nn_real* C,
     dim3 dimGrid(dimGrid_x, dimGrid_y);
 
     // Launch matrix-multiplication kernel
-    kernelMatAddSubtract<<<dimGrid, dimBlock>>>(A, B, C, alpha, beta, M, N); 
+    kernel_matrix_addition<<<dimGrid, dimBlock>>>(A, B, 
+                                                  alpha, 
+                                                  M, N); 
 
     return 0;
 }
 
 
-/*
-  Sigmoid function implemented for matrix
- */
+/* General matrix addition: C = alpha*A + beta*B */
 __global__ 
-void kernelSigmoid(nn_real* A, nn_real* B, int M, int N) 
+void kernel_oop_matrix_addition(nn_real* A, 
+                                nn_real* B, 
+                                nn_real* C,
+                                nn_real alpha, 
+                                nn_real beta, 
+                                int M, int N) 
 {
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (row < M && col < N) 
-	B[row + col*M] = 1 / (1 + exp(-A[row + col*M]));
+	    C[row + col*M] = alpha*A[row + col*M] + beta*B[row + col*M];
 }
 
-int callSigmoid(nn_real* A, nn_real* B, int M, int N) 
+int caller_oop_matrix_addition(nn_real* A, 
+                               nn_real* B, 
+                               nn_real* C,
+                               nn_real alpha, 
+                               nn_real beta, 
+                               int M, int N) 
 {
     // Thread block, grid dimensions
     dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
@@ -194,16 +387,179 @@ int callSigmoid(nn_real* A, nn_real* B, int M, int N)
     dim3 dimGrid(dimGrid_x, dimGrid_y);
 
     // Launch matrix-multiplication kernel
-    kernelSigmoid<<<dimGrid, dimBlock>>>(A, B, M, N); 
+    kernel_oop_matrix_addition<<<dimGrid, dimBlock>>>(A, B, C, 
+                                                    alpha, beta, 
+                                                    M, N); 
 
     return 0;
 }
 
-/*
-  Softmax function implemented for matrix
- */
+
+/* General matrix scalar addition: B = alpha*1 + beta*A */
 __global__ 
-void kernelSoftmax(nn_real* A, nn_real* B, int M, int N) 
+void kernel_matrix_scalar_addition(nn_real* A, 
+                                   nn_real* B, 
+                                   nn_real alpha, 
+                                   nn_real beta,
+                                   int M, int N) 
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < M && col < N) {
+	    B[row + col*M] = alpha*1 + beta*A[row + col*M];
+    }
+}
+
+int caller_matrix_scalar_addition(nn_real* A, 
+                                  nn_real* B, 
+                                  nn_real alpha, 
+                                  nn_real beta,
+                                  int M, int N) 
+{
+    // Thread block, grid dimensions
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    int dimGrid_x = (N + dimBlock.x - 1) / dimBlock.x;
+    int dimGrid_y = (M + dimBlock.y - 1) / dimBlock.y;
+    dim3 dimGrid(dimGrid_x, dimGrid_y);
+
+    // Launch matrix-multiplication kernel
+    kernel_matrix_scalar_addition<<<dimGrid, dimBlock>>>(A, B, 
+                                                         alpha, beta,
+                                                         M, N); 
+    return 0;
+}
+
+
+/* 3x matrix pointwise multiply  D = (alpha) * A % B % C */
+__global__
+void kernel_pointwise_three_matrix(nn_real* A, 
+                                  nn_real* B, 
+								  nn_real* C,
+								  nn_real* D,
+								  nn_real alpha, 
+								  int M, int N) 
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < M && col < N) {
+	    D[row + col*M] = alpha * A[row + col*M] * 
+            B[row + col*M] * C[row + col*M];
+    }
+}
+
+int caller_pointwise_three_matrix(nn_real* A, 
+                                  nn_real* B, 
+								  nn_real* C,
+								  nn_real* D,
+								  nn_real alpha, 
+								  int M, int N) 
+{
+    // Thread block, grid dimensions
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    int dimGrid_x = (N + dimBlock.x - 1) / dimBlock.x;
+    int dimGrid_y = (M + dimBlock.y - 1) / dimBlock.y;
+    dim3 dimGrid(dimGrid_x, dimGrid_y);
+
+    // Launch matrix-multiplication kernel
+    kernel_pointwise_three_matrix<<<dimGrid, dimBlock>>>(A, B, C, D,
+                                                        alpha, 
+                                                        M, N); 
+
+    return 0;
+}
+
+
+/* Transpose matrix: B = A.T */
+__global__ 
+void kernel_transpose(nn_real* A, nn_real* B, int M, int N) 
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < M && col < N) {
+        B[col + row*N] = A[row + col*M];
+    }
+}
+
+int caller_transpose(nn_real* A, nn_real* B, int M, int N) 
+{
+    // Thread block, grid dimensions
+    // M and N are dims of input matrix A
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    int dimGrid_x = (N + dimBlock.x - 1) / dimBlock.x;
+    int dimGrid_y = (M + dimBlock.y - 1) / dimBlock.y;
+    dim3 dimGrid(dimGrid_x, dimGrid_y);
+
+    // Launch matrix-multiplication kernel
+    kernel_transpose<<<dimGrid, dimBlock>>>(A, B, M, N); 
+    
+    return 0;
+}
+
+
+/* Sum across matrix rows: b = arma::sum(A, axis=1) */
+__global__
+void kernel_sum_matrix_rows(nn_real* A, 
+                            nn_real* b, 
+                            int M, int N) 
+{
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < M) {
+        nn_real bvalue = 0;
+        for (int col = 0; col < N; col++) {
+            bvalue += A[row + col*M];
+        }    
+        b[row] = bvalue;
+    }
+}
+
+int caller_sum_matrix_rows(nn_real* A, 
+                           nn_real* b, 
+                           int M, int N)
+{
+    // Thread block, grid dimensions
+    dim3 dimBlock(BLOCK_SIZE);
+    dim3 dimGrid((N + dimBlock.x - 1) / dimBlock.x);
+
+    // Launch matrix-multiplication kernel
+    kernel_sum_matrix_rows<<<dimGrid, dimBlock>>>(A, b, M, N); 
+    
+    return 0;
+}
+
+
+/* Sigmoid function implemented for matrix */
+__global__ 
+void kernel_sigmoid(nn_real* A, nn_real* B, int M, int N) 
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < M && col < N) 
+	    B[row + col*M] = 1 / (1 + exp(-A[row + col*M]));
+}
+
+int caller_sigmoid(nn_real* A, nn_real* B, int M, int N) 
+{
+    // Thread block, grid dimensions
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    int dimGrid_x = (N + dimBlock.x - 1) / dimBlock.x;
+    int dimGrid_y = (M + dimBlock.y - 1) / dimBlock.y;
+    dim3 dimGrid(dimGrid_x, dimGrid_y);
+
+    // Launch matrix-multiplication kernel
+    kernel_sigmoid<<<dimGrid, dimBlock>>>(A, B, M, N); 
+
+    return 0;
+}
+
+
+/* Softmax function implemented for matrix */
+__global__ 
+void kernel_softmax(nn_real* A, nn_real* B, int M, int N) 
 {
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -218,136 +574,27 @@ void kernelSoftmax(nn_real* A, nn_real* B, int M, int N)
     }
 }
 
-int callSoftmax(nn_real* A, nn_real* B, int M, int N) 
+int caller_softmax(nn_real* A, nn_real* B, int M, int N) 
 {
     // Thread block, grid dimensions
     dim3 dimBlock(BLOCK_SIZE);
     dim3 dimGrid((N + dimBlock.x - 1) / dimBlock.x);
 
     // Launch matrix-multiplication kernel
-    kernelSoftmax<<<dimGrid, dimBlock>>>(A, B, M, N); 
+    kernel_softmax<<<dimGrid, dimBlock>>>(A, B, M, N); 
     
     return 0;
 }
 
 
-/* 
-  Helper functions for neural networks
- */
-void parallel_feedforward(int* H, 
-		nn_real* W1, nn_real* W2, 
-		nn_real* b1, nn_real* b2, 
-		nn_real* z1, nn_real* z2, 
-		nn_real* a1, nn_real* a2, 
-		nn_real* X, nn_real* yc, nn_real* y, 
-		int batch_size)
-{
-    // compute z1 with gemm
-    callOutRepmatGEMM(W1, X, b1, z1, 1, 1, H[1], batch_size, H[0]);
-    
-    // compute a1 with sigmoid
-    callSigmoid(z1, a1, H[1], batch_size);
-
-    // compute z2 with gemm
-    callOutRepmatGEMM(W1, X, b1, z1, 1, 1, H[2], batch_size, H[1]);
-
-    // compute a2 with softmax
-    callSoftmax(z2, a2, H[2], batch_size);
-
-    // update yc from a2
-    yc = a2; 
-
-}
-
-void parallel_backprop(int* H, 
-		nn_real* W1, nn_real* W2,
-		nn_real* b1, nn_real* b2,
-		nn_real* z1, nn_real* z2,
-		nn_real* a1, nn_real* a2, 
-	        nn_real* dW1, nn_real* dW2,
-	        nn_real* db1, nn_real* db2,	
-	        nn_real* X, nn_real* yc, nn_real* y, 
-		nn_real* diff, nn_real reg, int batch_size) 
-{
-    int N = batch_size;
-    
-    // compute diff with mat-mat subtraction
-    callMatAddSubtract(yc, y, diff, (1.0 / N), -(1.0 / N), H[2], N); 	
-
-    // compute gradients dW1, db1
-    //callMatrixTranspose();
-
-}
 
 
-/*
-  Device Neural Network class methods 
- */
-// Constructor: allocate memory on device
-DeviceNNet::DeviceNNet(NeuralNetwork& nn, 
-		       const arma::Mat<nn_real>& X, 
-		       const arma::Mat<nn_real>& y) 
-	: layers(nn.num_layers), batch_size(y.n_cols) {
 
-  // memory management for nnet
-  cudaMalloc(&d_H, sizeof(int) * nn.H.size());
-  cudaMalloc(&d_b[0], sizeof(nn_real) * nn.H[1]);
-  cudaMalloc(&d_b[1], sizeof(nn_real) * nn.H[2]);
-  cudaMalloc(&d_W[0], sizeof(nn_real) * nn.H[0]*nn.H[1]); 
-  cudaMalloc(&d_W[1], sizeof(nn_real) * nn.H[1]*nn.H[2]);
 
-  // memory management for data (X, y)
-  cudaMalloc(&d_X, sizeof(nn_real) * X.n_rows * batch_size);
-  cudaMalloc(&d_y, sizeof(nn_real) * y.n_rows * batch_size);
-  
-  // memory management for cache (z, a, yc)  
-  cudaMalloc(&d_z[0], sizeof(nn_real) * nn.H[1]);
-  cudaMalloc(&d_z[1], sizeof(nn_real) * nn.H[2]);
-  cudaMalloc(&d_a[0], sizeof(nn_real) * nn.H[1]);
-  cudaMalloc(&d_a[1], sizeof(nn_real) * nn.H[2]);
-  cudaMalloc(&d_yc, sizeof(nn_real) * y.n_rows*batch_size);
 
-  // memory management for gradients (dW, db)
-  cudaMalloc(&d_dW[0], sizeof(nn_real) * nn.H[1]);
-  cudaMalloc(&d_dW[1], sizeof(nn_real) * nn.H[2]);
-  cudaMalloc(&d_db[0], sizeof(nn_real) * nn.H[1]);
-  cudaMalloc(&d_db[1], sizeof(nn_real) * nn.H[2]);
 
-}
 
-// Free memory on device
-DeviceNNet::~DeviceNNet() {
-  
-  cudaFree(d_H); cudaFree(d_W); cudaFree(d_b); 
-  cudaFree(d_z); cudaFree(d_a); cudaFree(d_yc);
-  cudaFree(d_dW); cudaFree(d_db);
-  cudaFree(d_X); cudaFree(d_y); 
-}
 
-// Copy data from CPU to the GPU
-void DeviceNNet::toGPU(NeuralNetwork& nn, 
-		       const arma::Mat<nn_real>& X, 
-		       const arma::Mat<nn_real>& y) {
-   
-  cudaMemcpy(d_H, &nn.H[0], sizeof(int) * nn.H.size(), cudaMemcpyHostToDevice); 
-  cudaMemcpy(d_b[0], nn.b[0].memptr(), sizeof(nn_real) * nn.H[1], cudaMemcpyHostToDevice); 
-  cudaMemcpy(d_b[1], nn.b[1].memptr(), sizeof(nn_real) * nn.H[2], cudaMemcpyHostToDevice); 
-  cudaMemcpy(d_W[0], nn.W[0].memptr(), sizeof(nn_real) * nn.H[0]*nn.H[1], cudaMemcpyHostToDevice); 
-  cudaMemcpy(d_W[1], nn.W[1].memptr(), sizeof(nn_real) * nn.H[1]*nn.H[2], cudaMemcpyHostToDevice); 
-  cudaMemcpy(d_X, X.memptr(), sizeof(nn_real) * X.n_rows * batch_size, cudaMemcpyHostToDevice); 
-  cudaMemcpy(d_y, y.memptr(), sizeof(nn_real) * y.n_rows * batch_size, cudaMemcpyHostToDevice); 
-
-}
-
-// Copy data back from GPU to the CPU
-void DeviceNNet::fromGPU(NeuralNetwork& nn) {
-
-  cudaMemcpy(nn.b[0].memptr(), d_b[0], sizeof(nn_real) * nn.H[1], cudaMemcpyDeviceToHost);
-  cudaMemcpy(nn.b[1].memptr(), d_b[1], sizeof(nn_real) * nn.H[2], cudaMemcpyDeviceToHost);
-  cudaMemcpy(nn.W[0].memptr(), d_W[0], sizeof(nn_real) * nn.H[0]*nn.H[1], cudaMemcpyDeviceToHost);
-  cudaMemcpy(nn.W[1].memptr(), d_W[1], sizeof(nn_real) * nn.H[1]*nn.H[2], cudaMemcpyDeviceToHost);
-
-} 
 
 
 

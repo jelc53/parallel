@@ -23,8 +23,8 @@ string output_dir = "Outputs";
 
 // TODO: Edit the following to choose which directory you wish to store your CPU
 // results in
-string cpu_save_dir = "/home/XXX";
-string cpu_load_dir = "/home/XXX";
+string cpu_save_dir = "/home/cme213-para/project/results/";
+string cpu_load_dir = "/home/cme213-para/project/results/";
 string grade_tag;
 string mpi_tag;
 

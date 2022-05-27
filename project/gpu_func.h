@@ -4,95 +4,210 @@
 #include <cuda_runtime.h>
 #include <helper_cuda.h>
 #include <helper_functions.h>
-#include <armadillo>
 
 #include "utils/common.h"
 #include "utils/gpu_util.h"
 #include "utils/neural_network.h"
 
-
-// ...
-class DeviceNNet {
-  public:
-    // nnet
-    int layers;
-    int* d_H;
-    nn_real* d_W[2];
-    nn_real* d_b[2];
-
-    // data
+// Device cache struct
+struct d_cache {
     int batch_size;
+	int H0; int H1; int H2;
+	
+    // cache
     nn_real* d_X;
     nn_real* d_y;
-
-    // cache
     nn_real* d_yc;
     nn_real* d_z[2];
     nn_real* d_a[2];
+
+    // tmp vars
+    nn_real* d_diff;
+	nn_real* d_a0T;
+	nn_real* d_W1T;
+	nn_real* d_XT;
+    nn_real* d_da1;
+    nn_real* d_dz1;
+	nn_real* d_1ma0;
+
+    d_cache(int* dims);
+    ~d_cache();
+
+	void toGPU(cache& bpcache);
+	void fromGPU(cache& bpcache);
+			
+};
+
+// Device gradients struct
+struct d_grads { 
+	int batch_size;
+	int H0; int H1; int H2;
+  
     nn_real* d_dW[2];
     nn_real* d_db[2];
     
-    DeviceNNet(NeuralNetwork& nn, 
-	       const arma::Mat<nn_real>& X, 
-	       const arma::Mat<nn_real>& y);
+    d_grads(int* dims);
+    ~d_grads();
 
-    ~DeviceNNet();
-
-    void toGPU(NeuralNetwork& nn,
-	       const arma::Mat<nn_real>& X, 
-	       const arma::Mat<nn_real>& y);
-
-    void fromGPU(NeuralNetwork& nn);
+	void toGPU(grads& bpgrads);
+	void fromGPU(grads& bpgrads);
 };
 
 
-// ...
-int myGEMM(nn_real* A, nn_real* B, nn_real* C, 
-		nn_real* alpha, nn_real* beta, 
-		int M, int N, int K);
-
-__global__ void kernelGEMM(nn_real* A, nn_real* B, nn_real* C, 
-		nn_real alpha, nn_real beta, 
-		int M, int N, int K);
-
-// ...
-int myOutGEMM(nn_real* A, nn_real* B, nn_real* C, nn_real* D,
-		nn_real* alpha, nn_real* beta, 
-		int M, int N, int K);
+// Routine to perform an in-place GEMM operation, i.e., C := alpha*A*B + beta*C
+int myGEMM(nn_real* A, 
+		   nn_real* B, 
+		   nn_real* C, 
+		   nn_real* alpha, nn_real* beta, 
+		   int M, int N, int K);
 
 __global__ 
-void kernelOutGEMM(nn_real* A, nn_real* B, nn_real* C, nn_real* D,
-		nn_real alpha, nn_real beta, 
-		int M, int N, int K);
+void kernelGEMM(nn_real* A, 
+				nn_real* B, 
+				nn_real* C, 
+				nn_real alpha, nn_real beta, 
+				int M, int N, int K); 
 
-// ...
-int myOutRepmatGEMM(nn_real* A, nn_real* B, nn_real* c, nn_real* D, 
-		nn_real* alpha, nn_real* beta, 
-		int M, int N, int K);
+
+/* GEMM out-of-place: D := alpha*A*B + beta*C */
+int caller_oop_gemm(nn_real* A, 
+					nn_real* B, 
+					nn_real* C, 
+					nn_real* D,
+					nn_real alpha, nn_real beta, 
+					int M, int N, int K);
 
 __global__ 
-void kernelOutRepmatGEMM(nn_real* A, nn_real* B, nn_real* c, nn_real* D, 
-		nn_real alpha, nn_real beta, 
-		int M, int N, int K);
+void kernel_oop_gemm(nn_real* A, 
+				     nn_real* B, 
+					 nn_real* C, 
+					 nn_real* D,
+					 nn_real alpha, nn_real beta, 
+					 int M, int N, int K);
 
-// ...
-void parallel_feedforward(int* H, 
-		nn_real* W1, nn_real* W2, 
-		nn_real* b1, nn_real* b2, 
-		nn_real* z1, nn_real* z2, 
-		nn_real* a1, nn_real* a2, 
-		nn_real* X, nn_real* yc, nn_real* y, 
-		int batch_size);
 
-// ...
-void parallel_backprop(int* H, 
-		nn_real* W1, nn_real* W2,
-		nn_real* b1, nn_real* b2,
-		nn_real* z1, nn_real* z2,
-		nn_real* a1, nn_real* a2, 
-	        nn_real* dW1, nn_real* dW2,
-	        nn_real* db1, nn_real* db2,	
-	        nn_real* X, nn_real* yc, nn_real* y, 
-		nn_real* diff, nn_real reg, int batch_size);
+/* Simple matrix multiplication: C := (alpha)*A*B */
+int caller_matrix_multiply(nn_real* __restrict__ A, 
+                           nn_real* __restrict__ B,
+                           nn_real* __restrict__ C, 
+                           nn_real alpha, 
+                           int M, int N, int K);
+
+__global__ 
+void kernel_matrix_multiply(nn_real* __restrict__ A, 
+                            nn_real* __restrict__ B, 
+                            nn_real* __restrict__ C, 
+                            nn_real alpha, 
+                            int M, int N, int K);
+
+
+
+
+/* GEMM RepMat: D := alpha*A*B + beta*[ccc] */
+int caller_linear_transform(nn_real* A, 
+							nn_real* B, 
+							nn_real* c, 
+							nn_real* D, 
+							nn_real alpha, nn_real beta, 
+							int M, int N, int K);
+
+__global__ 
+void kernel_linear_transform(nn_real* A, 
+					         nn_real* B, 
+							 nn_real* c, 
+							 nn_real* D, 
+							 nn_real alpha, nn_real beta, 
+							 int M, int N, int K);
+
+
+/* Matrix addition inplace: A += alpha*B */
+int caller_matrix_addition(nn_real* A, 
+						   nn_real* B, 
+						   nn_real alpha, 
+						   int M, int N); 
+
+__global__ 
+void kernel_matrix_addition(nn_real* A, 
+							nn_real* B, 
+							nn_real alpha, 
+							int M, int N);
+
+
+/* General matrix addition: C = alpha*A + beta*B */
+int caller_oop_matrix_addition(nn_real* A, 
+							   nn_real* B, 
+							   nn_real* C, 
+							   nn_real alpha, 
+							   nn_real beta,
+							   int M, int N);
+
+__global__ 
+void kernel_oop_matrix_addition(nn_real* A, 
+								nn_real* B, 
+								nn_real* C, 
+								nn_real alpha, 
+								nn_real beta, 
+								int M, int N);
+
+
+/* General matrix scalar addition: B = alpha*1 - beta*A */
+int caller_matrix_scalar_addition(nn_real* A, 
+								  nn_real* B, 
+								  nn_real alpha, 
+								  nn_real beta,
+								  int M, int N);
+
+__global__ 
+void kernel_matrix_scalar_addition(nn_real* A, 
+								   nn_real* B, 
+								   nn_real alpha, 
+								   nn_real beta,
+								   int M, int N);
+
+
+/* 3x matrix pointwise multiply  D = (alpha) * A % B % C */
+int caller_pointwise_three_matrix(nn_real* A, 
+                                  nn_real* B, 
+								  nn_real* C,
+								  nn_real* D,
+								  nn_real alpha, 
+								  int M, int N);
+
+__global__ 
+void kernel_pointwise_three_matrix(nn_real* A, 
+                                   nn_real* B, 
+								   nn_real* C,
+								   nn_real* D,
+								   nn_real alpha, 
+								   int M, int N);
+
+
+/* Transpose matrix: B = A.T */
+int caller_transpose(nn_real* A, nn_real* B, int M, int N);
+
+__global__ 
+void kernel_transpose(nn_real* A, nn_real* B, int M, int N);
+
+
+/* Sum across matrix rows: b = arma::sum(A, axis=1) */
+int caller_sum_matrix_rows(nn_real* A, nn_real* b, int M, int N);
+
+__global__ 
+void kernel_sum_matrix_rows(nn_real* A, nn_real* b, int M, int N);
+
+
+/*  Sigmoid function implemented for matrix */
+int caller_sigmoid(nn_real* A, nn_real* B, int M, int N) ;
+
+__global__ 
+void kernel_sigmoid(nn_real* A, nn_real* B, int M, int N);
+
+
+/* Softmax function implemented for matrix */
+int caller_softmax(nn_real* A, nn_real* B, int M, int N);
+
+__global__ 
+void kernel_softmax(nn_real* A, nn_real* B, int M, int N);
+
 
 #endif
