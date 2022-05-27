@@ -19,68 +19,79 @@ d_cache::d_cache(int* dims)
 	: H0(dims[0]), H1(dims[1]), H2(dims[2]), batch_size(dims[3])
 {  
   // memory management for cache  
-  cudaMalloc(&d_z[0], sizeof(nn_real) * H1*batch_size);
-  check_launch("memcpy d_10");
+  cudaMalloc(&d_z0, sizeof(nn_real) * H1*batch_size);
+  check_launch("malloc d_z0");
   
-  cudaMalloc(&d_z[1], sizeof(nn_real) * H2*batch_size);
-  check_launch("memcpy d_z1");
+  cudaMalloc(&d_z1, sizeof(nn_real) * H2*batch_size);
+  check_launch("malloc d_z1");
   
-  cudaMalloc(&d_a[0], sizeof(nn_real) * H1*batch_size);
-  check_launch("memcpy d_a0");
+  cudaMalloc(&d_a0, sizeof(nn_real) * H1*batch_size);
+  check_launch("malloc d_a0");
   
-  cudaMalloc(&d_a[1], sizeof(nn_real) * H2*batch_size);
-  check_launch("memcpy d_a1");
+  cudaMalloc(&d_a1, sizeof(nn_real) * H2*batch_size);
+  check_launch("malloc d_a1");
   
   cudaMalloc(&d_yc, sizeof(nn_real) * H2*batch_size);
-  check_launch("memcpy d_yc");
+  check_launch("malloc d_yc");
 
   // memory management for data (X, y)
   cudaMalloc(&d_X, sizeof(nn_real) * H0*batch_size);
-  check_launch("memcpy d_X");
+  check_launch("malloc d_X");
   
   cudaMalloc(&d_y, sizeof(nn_real) * H2*batch_size);
-  check_launch("memcpy d_y");
+  check_launch("malloc d_y");
   
   // memory management for intermediate variables
   cudaMalloc(&d_diff, sizeof(nn_real) * H2*batch_size);
-  check_launch("memcpy d_diff");
+  check_launch("malloc d_diff");
 
   cudaMalloc(&d_a0T, sizeof(nn_real) * H1*batch_size); 
-  check_launch("memcpy d_a0T");
+  check_launch("malloc d_a0T");
 
   cudaMalloc(&d_W1T, sizeof(nn_real) * H0*H1); 
-  check_launch("memcpy d_W1T");
+  check_launch("malloc d_W1T");
 
   cudaMalloc(&d_XT, sizeof(nn_real) * H0*batch_size); 
-  check_launch("memcpy d_XT");
+  check_launch("malloc d_XT");
 
   cudaMalloc(&d_da1, sizeof(nn_real) * H1*batch_size);
-  check_launch("memcpy d_da1");
+  check_launch("malloc d_da1");
  
   cudaMalloc(&d_dz1, sizeof(nn_real) * H1*batch_size);
-  check_launch("memcpy d_dz1");
+  check_launch("malloc d_dz1");
 
   cudaMalloc(&d_1ma0, sizeof(nn_real) * H1*batch_size);
-  check_launch("memcpy d_1ma0");
+  check_launch("malloc d_1ma0");
 }
 
 d_cache::~d_cache() {
 
-  cudaFree(d_z); cudaFree(d_a); cudaFree(d_yc);
-  cudaFree(d_diff); cudaFree(d_da1); cudaFree(d_dz1);
+  cudaFree(d_z0); 
+  cudaFree(d_z1);
+  cudaFree(d_a0); 
+  cudaFree(d_a1); 
+  cudaFree(d_yc);
+  cudaFree(d_diff); 
+  cudaFree(d_a0T); 
+  cudaFree(d_W1T);
+  cudaFree(d_XT);
+  cudaFree(d_da1);
+  cudaFree(d_dz1);
+  cudaFree(d_1ma0);
+  
 }
 
 void d_cache::toGPU(cache& bpcache) {
-  cudaMemcpy(d_z[0], bpcache.z[0].memptr(), sizeof(nn_real) * H1*batch_size, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_z0, bpcache.z[0].memptr(), sizeof(nn_real) * H1*batch_size, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_a0");
 
-  cudaMemcpy(d_z[1], bpcache.z[1].memptr(), sizeof(nn_real) * H2*batch_size, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_z1, bpcache.z[1].memptr(), sizeof(nn_real) * H2*batch_size, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_a1");
 
-  cudaMemcpy(d_a[0], bpcache.a[0].memptr(), sizeof(nn_real) * H1*batch_size, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_a0, bpcache.a[0].memptr(), sizeof(nn_real) * H1*batch_size, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_a0");
 
-  cudaMemcpy(d_a[1], bpcache.a[1].memptr(), sizeof(nn_real) * H2*batch_size, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_a1, bpcache.a[1].memptr(), sizeof(nn_real) * H2*batch_size, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_a1");
 
   cudaMemcpy(d_yc, bpcache.yc.memptr(), sizeof(nn_real) * H2*batch_size, cudaMemcpyHostToDevice); 
@@ -90,10 +101,10 @@ void d_cache::toGPU(cache& bpcache) {
 
 void d_cache::fromGPU(cache& bpcache) {
     
-  cudaMemcpy(bpcache.z[0].memptr(), d_z[0], sizeof(nn_real) * H1*batch_size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpcache.z[1].memptr(), d_z[1], sizeof(nn_real) * H2*batch_size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpcache.a[0].memptr(), d_a[0], sizeof(nn_real) * H1*batch_size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpcache.a[1].memptr(), d_a[1], sizeof(nn_real) * H2*batch_size, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.z[0].memptr(), d_z0, sizeof(nn_real) * H1*batch_size, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.z[1].memptr(), d_z1, sizeof(nn_real) * H2*batch_size, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.a[0].memptr(), d_a0, sizeof(nn_real) * H1*batch_size, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.a[1].memptr(), d_a1, sizeof(nn_real) * H2*batch_size, cudaMemcpyDeviceToHost);
   cudaMemcpy(bpcache.yc.memptr(), d_yc, sizeof(nn_real) * H2*batch_size, cudaMemcpyDeviceToHost);
 
 }
@@ -104,45 +115,48 @@ d_grads::d_grads(int* dims)
     : H0(dims[0]), H1(dims[1]), H2(dims[2]), batch_size(dims[3])
 {
   // memory management for gradients (dW, db)
-  cudaMalloc(&d_dW[0], sizeof(nn_real) * H0*H1);
-  check_launch("memcpy d_dW0");
+  cudaMalloc(&d_dW0, sizeof(nn_real) * H0*H1);
+  check_launch("malloc d_dW0");
   
-  cudaMalloc(&d_dW[1], sizeof(nn_real) * H1*H2);
-  check_launch("memcpy d_dW1");
+  cudaMalloc(&d_dW1, sizeof(nn_real) * H1*H2);
+  check_launch("malloc d_dW1");
   
-  cudaMalloc(&d_db[0], sizeof(nn_real) * H1);
-  check_launch("memcpy d_db0");
+  cudaMalloc(&d_db0, sizeof(nn_real) * H1);
+  check_launch("malloc d_db0");
   
-  cudaMalloc(&d_db[1], sizeof(nn_real) * H2);
-  check_launch("memcpy d_db1");
+  cudaMalloc(&d_db1, sizeof(nn_real) * H2);
+  check_launch("malloc d_db1");
 
 }
 
 d_grads::~d_grads() {
-  cudaFree(d_dW); cudaFree(d_db);
+  cudaFree(d_dW0);
+  cudaFree(d_dW1); 
+  cudaFree(d_db0);
+  cudaFree(d_db1);
 }
 
 void d_grads::toGPU(grads& bpgrads) {
-  cudaMemcpy(d_dW[0], bpgrads.dW[0].memptr(), sizeof(nn_real) * H0*H1, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_dW0, bpgrads.dW[0].memptr(), sizeof(nn_real) * H0*H1, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_dW0");
 
-  cudaMemcpy(d_dW[1], bpgrads.dW[1].memptr(), sizeof(nn_real) * H1*H2, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_dW1, bpgrads.dW[1].memptr(), sizeof(nn_real) * H1*H2, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_dW1");
 
-  cudaMemcpy(d_db[0], bpgrads.db[0].memptr(), sizeof(nn_real) * H1, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_db0, bpgrads.db[0].memptr(), sizeof(nn_real) * H1, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_db0");
 
-  cudaMemcpy(d_db[1], bpgrads.db[1].memptr(), sizeof(nn_real) * H2, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_db1, bpgrads.db[1].memptr(), sizeof(nn_real) * H2, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_db1");
 
 }
 
 void d_grads::fromGPU(grads& bpgrads) {
 
-  cudaMemcpy(bpgrads.dW[0].memptr(), d_dW[0], sizeof(nn_real) * H0*H1, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpgrads.dW[1].memptr(), d_dW[1], sizeof(nn_real) * H1*H2, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpgrads.db[0].memptr(), d_db[0], sizeof(nn_real) * H1, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpgrads.db[1].memptr(), d_db[1], sizeof(nn_real) * H2, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpgrads.dW[0].memptr(), d_dW0, sizeof(nn_real) * H0*H1, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpgrads.dW[1].memptr(), d_dW1, sizeof(nn_real) * H1*H2, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpgrads.db[0].memptr(), d_db0, sizeof(nn_real) * H1, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpgrads.db[1].memptr(), d_db1, sizeof(nn_real) * H2, cudaMemcpyDeviceToHost);
 
 }
 

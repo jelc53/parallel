@@ -15,7 +15,9 @@
 #include "gpu_func.h"
 #include "mpi.h"
 
-#define DEBUG_FFORWARD 0 
+#define DEBUG 0
+#define DEBUG_FFORWARD 0
+#define DEBUG_BACKPROP 0
 
 #define MPI_SAFE_CALL(call)                                                  \
   do {                                                                       \
@@ -41,11 +43,13 @@ nn_real norms(NeuralNetwork& nn) {
 class d_NeuralNetwork {
   public:
     const int layers = 2;
+    int H0; int H1; int H2;
     
     // nnet
-    int* d_H;
-    nn_real* d_W[2];
-    nn_real* d_b[2];
+    nn_real* d_W0;
+    nn_real* d_W1;
+    nn_real* d_b0;
+    nn_real* d_b1;
 
     d_NeuralNetwork(NeuralNetwork& nn); 
     ~d_NeuralNetwork();
@@ -59,61 +63,55 @@ class d_NeuralNetwork {
 // Device Neural Network class implementation
 // Constructor: allocate memory on device
 d_NeuralNetwork::d_NeuralNetwork(NeuralNetwork& nn) 
-	: layers(nn.num_layers) {
+	: layers(nn.num_layers), H0(nn.H[0]), H1(nn.H[1]), H2(nn.H[2])
+{
+  // memory management for nnet 
+  cudaMalloc(&d_W0, sizeof(nn_real) * nn.H[0]*nn.H[1]); 
+  check_launch("malloc d_W0");
+  
+  cudaMalloc(&d_W1, sizeof(nn_real) * nn.H[1]*nn.H[2]);
+  check_launch("malloc d_W1");
 
-  // memory management for nnet
-  cudaMalloc(&d_H, sizeof(int) * nn.H.size());
-  check_launch("memcpy d_H");
+  cudaMalloc(&d_b0, sizeof(nn_real) * nn.H[1]);
+  check_launch("malloc d_b0");
   
-  cudaMalloc(&d_b[0], sizeof(nn_real) * nn.H[1]);
-  check_launch("memcpy d_b0");
-  
-  cudaMalloc(&d_b[1], sizeof(nn_real) * nn.H[2]);
-  check_launch("memcpy d_b1");
-  
-  cudaMalloc(&d_W[0], sizeof(nn_real) * nn.H[0]*nn.H[1]); 
-  check_launch("memcpy d_W0");
-  
-  cudaMalloc(&d_W[1], sizeof(nn_real) * nn.H[1]*nn.H[2]);
-  check_launch("memcpy d_W1");
-
+  cudaMalloc(&d_b1, sizeof(nn_real) * nn.H[2]);
+  check_launch("malloc d_b1");
 
 }
 
 // Free memory on device
 d_NeuralNetwork::~d_NeuralNetwork() {
-  cudaFree(d_H); cudaFree(d_W); cudaFree(d_b); 
+  cudaFree(d_W0);
+  cudaFree(d_W1);
+  cudaFree(d_b0);
+  cudaFree(d_b1); 
 }
 
 // Copy data from CPU to the GPU
 void d_NeuralNetwork::toGPU(NeuralNetwork& nn) { 
-   
-  cudaMemcpy(d_H, &nn.H[0], sizeof(int) * nn.H.size(), cudaMemcpyHostToDevice); 
-  check_launch("memcpy d_H");
   
-  cudaMemcpy(d_b[0], nn.b[0].memptr(), sizeof(nn_real) * nn.H[1], cudaMemcpyHostToDevice); 
-  check_launch("memcpy d_b0");
-  
-  cudaMemcpy(d_b[1], nn.b[1].memptr(), sizeof(nn_real) * nn.H[2], cudaMemcpyHostToDevice); 
-  check_launch("memcpy d_b1");
-  
-  cudaMemcpy(d_W[0], nn.W[0].memptr(), sizeof(nn_real) * nn.H[0]*nn.H[1], cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_W0, nn.W[0].memptr(), sizeof(nn_real) * nn.H[0]*nn.H[1], cudaMemcpyHostToDevice); 
   check_launch("memcpy d_W0");
 
-  cudaMemcpy(d_W[1], nn.W[1].memptr(), sizeof(nn_real) * nn.H[1]*nn.H[2], cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_W1, nn.W[1].memptr(), sizeof(nn_real) * nn.H[1]*nn.H[2], cudaMemcpyHostToDevice); 
   check_launch("memcpy d_W1");
 
-
+  cudaMemcpy(d_b0, nn.b[0].memptr(), sizeof(nn_real) * nn.H[1], cudaMemcpyHostToDevice); 
+  check_launch("memcpy d_b0");
+  
+  cudaMemcpy(d_b1, nn.b[1].memptr(), sizeof(nn_real) * nn.H[2], cudaMemcpyHostToDevice); 
+  check_launch("memcpy d_b1");
 }
 
 // Copy data back from GPU to the CPU
 void d_NeuralNetwork::fromGPU(NeuralNetwork& nn) {
 
-  cudaMemcpy(nn.b[0].memptr(), d_b[0], sizeof(nn_real) * nn.H[1], cudaMemcpyDeviceToHost);
-  cudaMemcpy(nn.b[1].memptr(), d_b[1], sizeof(nn_real) * nn.H[2], cudaMemcpyDeviceToHost);
-  cudaMemcpy(nn.W[0].memptr(), d_W[0], sizeof(nn_real) * nn.H[0]*nn.H[1], cudaMemcpyDeviceToHost);
-  cudaMemcpy(nn.W[1].memptr(), d_W[1], sizeof(nn_real) * nn.H[1]*nn.H[2], cudaMemcpyDeviceToHost);
-
+  cudaMemcpy(nn.W[0].memptr(), d_W0, sizeof(nn_real) * nn.H[0]*nn.H[1], cudaMemcpyDeviceToHost);
+  cudaMemcpy(nn.W[1].memptr(), d_W1, sizeof(nn_real) * nn.H[1]*nn.H[2], cudaMemcpyDeviceToHost);
+  cudaMemcpy(nn.b[0].memptr(), d_b0, sizeof(nn_real) * nn.H[1], cudaMemcpyDeviceToHost);
+  cudaMemcpy(nn.b[1].memptr(), d_b1, sizeof(nn_real) * nn.H[2], cudaMemcpyDeviceToHost);
+  
 } 
 
 
@@ -220,6 +218,248 @@ void predict(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
   }
 }
 
+
+/* 
+  Helper functions for parallel neural networks
+ */
+void parallel_feedforward(d_NeuralNetwork& dnn, d_cache& dcache)
+{
+    int err;
+    
+    err = caller_linear_transform(dnn.d_W0, 
+                                  dcache.d_X, 
+                                  dnn.d_b0, 
+                                  dcache.d_z0, 
+                                  1, 1, 
+                                  dcache.H1,
+                                  dcache.batch_size, 
+                                  dcache.H0);
+
+    if (err != 0) { 
+        std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // compute a1 with sigmoid
+    err = caller_sigmoid(dcache.d_z0, 
+                         dcache.d_a0, 
+                         dcache.H1, 
+                         dcache.batch_size);
+    
+    if (err != 0) { 
+        std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // compute z2 with linear transform
+    err = caller_linear_transform(dnn.d_W1, 
+                                  dcache.d_X, 
+                                  dnn.d_b1, 
+                                  dcache.d_z1, 
+                                  1, 1, 
+                                  dcache.H2, 
+                                  dcache.batch_size, 
+                                  dcache.H1);
+    
+    if (err != 0) { 
+        std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // compute a2 with softmax
+    err = caller_softmax(dcache.d_z1, 
+                         dcache.d_a1, 
+                         dcache.H2, 
+                         dcache.batch_size);
+
+    if (err != 0) { 
+        std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+    // update yc from a2
+    dcache.d_yc = dcache.d_a1; 
+
+}
+
+void parallel_backprop(d_NeuralNetwork& dnn, d_cache& dcache, d_grads& dgrad, nn_real reg)
+{
+    int err;
+
+    // compute diff with mat-mat subtraction
+    nn_real val = 1.0 / dcache.batch_size;
+    err = caller_oop_matrix_addition(dcache.d_yc, 
+                                     dcache.d_y, 
+                                     dcache.d_diff, 
+                                     val, -val, 
+                                     dcache.H2, 
+                                     dcache.batch_size); 
+
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // compute a0.T with transpose kernel
+    err = caller_transpose(dcache.d_a0, 
+                           dcache.d_a0T, 
+                           dcache.H1, 
+                           dcache.batch_size);
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // compute dW1 with gemm
+    err = caller_oop_gemm(dcache.d_diff, 
+                          dcache.d_a0T, 
+                          dnn.d_W1, 
+                          dgrad.d_dW1, 
+                          1, reg, 
+                          dcache.H2, // M
+                          dcache.H1, // N
+                          dcache.batch_size);
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // compute db1 by summing across rows
+    err = caller_sum_matrix_rows(dcache.d_diff, 
+                                 dgrad.d_db1, 
+                                 dcache.H2, 
+                                 dcache.batch_size);
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // compute W1.T with transpose kernel
+    err = caller_transpose(dnn.d_W1, 
+                           dcache.d_W1T, 
+                           dcache.H2, 
+                           dcache.H1);
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+        
+    // compute da1 with matrix multiplication
+    err = caller_matrix_multiply(dcache.d_W1T, 
+                                 dcache.d_diff, 
+                                 dcache.d_da1, 
+                                 1, 
+                                 dcache.H1,
+                                 dcache.batch_size, 
+                                 dcache.H2);
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // compute 1ma0 with matrix subtraction
+    err = caller_matrix_scalar_addition(dcache.d_a0,
+                                       dcache.d_1ma0,
+                                       1.0, -1.0,
+                                       dcache.H1, 
+                                       dcache.batch_size);
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // compute dz1 with pointwise matrix operation
+    err = caller_pointwise_three_matrix(dcache.d_da1,
+                                        dcache.d_a0,
+                                        dcache.d_1ma0,
+                                        dcache.d_dz1,
+                                        1.0,
+                                        dcache.H1, 
+                                        dcache.batch_size);
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // compute X.T with transpose
+    err = caller_transpose(dcache.d_X, 
+                           dcache.d_XT, 
+                           dcache.H0,
+                           dcache.batch_size);
+
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // compute dW[0] with gemm
+    err = caller_oop_gemm(dcache.d_dz1, 
+                          dcache.d_XT,
+                          dnn.d_W0,
+                          dgrad.d_dW0,
+                          1.0, reg,
+                          dcache.H1,
+                          dcache.H0,
+                          dcache.batch_size);
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // compute db[0] with matrix row sum
+    err = caller_sum_matrix_rows(dcache.d_dz1, 
+                                 dgrad.d_db0, 
+                                 dcache.H1, 
+                                 dcache.batch_size);
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+}
+
+
+void parallel_descent(d_NeuralNetwork& dnn, d_grads& dgrad, nn_real learning_rate) 
+{
+    int err;
+
+    // compute new weights with mat-mat subtraction
+    err = caller_matrix_addition(dnn.d_W0, 
+                                 dgrad.d_dW0, 
+                                 -1.0*learning_rate, 
+                                 dgrad.H1, 
+                                 dgrad.H0); 	
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    err = caller_matrix_addition(dnn.d_W1, 
+                                 dgrad.d_dW1, 
+                                 -1.0*learning_rate, 
+                                 dgrad.H2,
+                                 dgrad.H1); 	
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // compute new bias with vec-vec subtraction
+    err = caller_matrix_addition(dnn.d_b0, 
+                                 dgrad.d_db0, 
+                                 -1.0*learning_rate, 
+                                 dgrad.H1, 
+                                 1); 	
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    err = caller_matrix_addition(dnn.d_b1, 
+                                 dgrad.d_db1, 
+                                 -learning_rate, 
+                                 dgrad.H2, 
+                                 1); 	
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+}
+
+
 /*
  * Train the neural network &nn
  */
@@ -230,6 +470,23 @@ void train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
   int N = X.n_cols;
   int iter = 0;
   int print_flag = 0;
+
+  #if DEBUG
+    // nn2 on host
+    NeuralNetwork nn2(nn.H);
+    memcpy(nn2.W[0].memptr(), nn.W[0].memptr(), sizeof(nn_real)*nn.H[0]*nn.H[1]); 
+    memcpy(nn2.W[1].memptr(), nn.W[1].memptr(), sizeof(nn_real)*nn.H[1]*nn.H[2]); 
+    memcpy(nn2.b[0].memptr(), nn.b[0].memptr(), sizeof(nn_real)*nn.H[1]); 
+    memcpy(nn2.b[1].memptr(), nn.b[1].memptr(), sizeof(nn_real)*nn.H[2]); 
+
+    // dnn2 on device
+    int dims[4] = {nn.H[0], nn.H[1], nn.H[2], batch_size};
+    d_NeuralNetwork dnn2(nn2);
+    d_cache dcache2(dims);
+    d_grads dgrad2(dims);
+
+    std::string filename = "debug_ff.out";
+  #endif
 
   for (int epoch = 0; epoch < epochs; ++epoch) {
     int num_batches = (N + batch_size - 1) / batch_size;
@@ -243,33 +500,45 @@ void train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
       feedforward(nn, X_batch, bpcache);
       
       #if DEBUG_FFORWARD
-        NeuralNetwork nn2(nn.H);
-        memcpy(nn.W, nn2.W, sizeof(nn_real)*(nn.H[0]*nn.H[1] + nn.H[1]*nn.H[2])); 
-        memcpy(nn.b, nn2.b, sizeof(nn_real)*(nn.H[1] + nn.H[2])); 
-        std::string filename = "debug_ff.out";
-         
-        int dims[4] = {nn.H[0], nn.H[1], nn.H[2], batch_size};
-
-        d_NeuralNetwork dnn2(nn2);
-        d_cache dcache2(dims);
-        d_grads dgrad2(dims);
-
-        int batch_size_adj = std::min(batch_size, N - (batch*batch_size));
-
+        std::cout << "starting debug routine #1 ..." << std::endl;
         dnn2.toGPU(nn);
 
+        int batch_size_adj = std::min(batch_size, N - (batch*batch_size));
         cudaMemcpy(dcache2.d_X, X_batch.memptr(), sizeof(nn_real) * X.n_rows * batch_size_adj, cudaMemcpyHostToDevice); 
         cudaMemcpy(dcache2.d_y, y_batch.memptr(), sizeof(nn_real) * y.n_rows * batch_size_adj, cudaMemcpyHostToDevice); 
+        std::cout << "copied data to device ... " << std::endl;
+        
+        parallel_feedforward(dnn2, dcache2);
+        std::cout << "completed feedforward" << std::endl;
 
-        parallel_feed_forward(dnn2, dcache2);
         dnn2.fromGPU(nn2);
+        std::cout << "retrieved parameters ..." << std::endl;
         
         int error = checkNNErrors(nn2, nn, filename);
-        std::cout << "Debug ff result: " << error << std::endl;
+        // std::cout << "Debug ff result: " << error << std::endl;
       #endif
 
       struct grads bpgrads;
       backprop(nn, y_batch, reg, bpcache, bpgrads);
+
+      #if DEBUG_BACKPROP
+        std::cout << "starting debug routine #2 ..." << std::endl;
+        dnn2.toGPU(nn);
+
+        int batch_size_adj = std::min(batch_size, N - (batch*batch_size));
+        cudaMemcpy(dcache2.d_X, X_batch.memptr(), sizeof(nn_real) * X.n_rows * batch_size_adj, cudaMemcpyHostToDevice); 
+        cudaMemcpy(dcache2.d_y, y_batch.memptr(), sizeof(nn_real) * y.n_rows * batch_size_adj, cudaMemcpyHostToDevice); 
+        std::cout << "copied data to device ... " << std::endl;
+
+        parallel_backprop(dnn2, dcache2, dgrad2, reg);
+        std::cout << "completed backprop ... " << std::endl;
+
+        dnn2.fromGPU(nn2);
+        std::cout << "retrieved parameters ..." << std::endl;
+        
+        int error = checkNNErrors(nn2, nn, filename);
+        // std::cout << "Debug ff result: " << error << std::endl;
+      #endif
 
       if (print_every > 0 && iter % print_every == 0) {
         if (grad_check) {
@@ -314,245 +583,6 @@ void train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
   }
 }
 
-/* 
-  Helper functions for neural networks
- */
-void parallel_feedforward(d_NeuralNetwork& dnn, d_cache& dcache)
-{
-    int err;
-    
-    err = caller_linear_transform(dnn.d_W[0], 
-                                  dcache.d_X, 
-                                  dnn.d_b[0], 
-                                  dcache.d_z[0], 
-                                  1, 1, 
-                                  dcache.H1,
-                                  dcache.batch_size, 
-                                  dcache.H0);
-
-    if (err != 0) { 
-        std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-    // compute a1 with sigmoid
-    err = caller_sigmoid(dcache.d_z[0], 
-                         dcache.d_a[0], 
-                         dcache.H1, 
-                         dcache.batch_size);
-    
-    if (err != 0) { 
-        std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-    // compute z2 with linear transform
-    err = caller_linear_transform(dnn.d_W[1], 
-                                  dcache.d_X, 
-                                  dnn.d_b[1], 
-                                  dcache.d_z[1], 
-                                  1, 1, 
-                                  dcache.H2, 
-                                  dcache.batch_size, 
-                                  dcache.H1);
-    
-    if (err != 0) { 
-        std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-    // compute a2 with softmax
-    err = caller_softmax(dcache.d_z[1], 
-                         dcache.d_a[1], 
-                         dcache.H2, 
-                         dcache.batch_size);
-
-    if (err != 0) { 
-        std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-    // update yc from a2
-    dcache.d_yc = dcache.d_a[1]; 
-
-}
-
-void parallel_backprop(d_NeuralNetwork& dnn, d_cache& dcache, d_grads& dgrad, nn_real reg)
-{
-    int err;
-
-    // compute diff with mat-mat subtraction
-    nn_real val = 1.0 / dcache.batch_size;
-    err = caller_oop_matrix_addition(dcache.d_yc, 
-                                    dcache.d_y, 
-                                    dcache.d_diff, 
-                                    val, -val, 
-                                    dcache.H2, 
-                                    dcache.batch_size); 
-
-    if (err != 0) { 
-	    std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-    // compute a0.T with transpose kernel
-    err = caller_transpose(dcache.d_a[0], 
-                           dcache.d_a0T, 
-                           dcache.H1, 
-                           dcache.batch_size);
-    
-    if (err != 0) { 
-	    std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-    // compute dW1 with gemm
-    err = caller_oop_gemm(dcache.d_diff, 
-                          dcache.d_a0T, 
-                          dnn.d_W[1], 
-                          dgrad.d_dW[1], 
-                          1, reg, 
-                          dcache.H2, // M
-                          dcache.H1, // N
-                          dcache.batch_size);
-    
-    if (err != 0) { 
-	    std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-    // compute db1 by summing across rows
-    err = caller_sum_matrix_rows(dcache.d_diff, 
-                                 dgrad.d_db[1], 
-                                 dcache.H2, 
-                                 dcache.batch_size);
-    
-    if (err != 0) { 
-	    std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-    // compute W1.T with transpose kernel
-    err = caller_transpose(dnn.d_W[1], 
-                           dcache.d_W1T, 
-                           dcache.H2, 
-                           dcache.H1);
-    
-    if (err != 0) { 
-	    std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-        
-    // compute da1 with matrix multiplication
-    err = caller_matrix_multiply(dcache.d_W1T, 
-                                 dcache.d_diff, 
-                                 dcache.d_da1, 
-                                 1, 
-                                 dcache.H1,
-                                 dcache.batch_size, 
-                                 dcache.H2);
-    
-    if (err != 0) { 
-	    std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-    // compute 1ma0 with matrix subtraction
-    err = caller_matrix_scalar_addition(dcache.d_a[0],
-                                      dcache.d_1ma0,
-                                      1.0, -1.0,
-                                      dcache.H1, 
-                                      dcache.batch_size);
-    
-    if (err != 0) { 
-	    std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-    // compute dz1 with pointwise matrix operation
-    err = caller_pointwise_three_matrix(dcache.d_da1,
-                                      dcache.d_a[0],
-                                      dcache.d_1ma0,
-                                      dcache.d_dz1,
-                                      1.0,
-                                      dcache.H1, 
-                                      dcache.batch_size);
-    
-    if (err != 0) { 
-	    std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-    // compute X.T with transpose
-    err = caller_transpose(dcache.d_X, 
-                          dcache.d_XT, 
-                          dcache.H0,
-                          dcache.batch_size);
-
-    if (err != 0) { 
-	    std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-    // compute dW[0] with gemm
-    err = caller_oop_gemm(dcache.d_dz1, 
-                          dcache.d_XT,
-                          dnn.d_W[0],
-                          dgrad.d_dW[0],
-                          1.0, reg,
-                          dcache.H1,
-                          dcache.H0,
-                          dcache.batch_size);
-    
-    if (err != 0) { 
-	    std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-    // compute db[0] with matrix row sum
-    err = caller_sum_matrix_rows(dcache.d_dz1, 
-                                 dgrad.d_db[0], 
-                                 dcache.H1, 
-                                 dcache.batch_size);
-    
-    if (err != 0) { 
-	    std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-}
-
-
-void parallel_descent(d_NeuralNetwork& dnn, d_grads& dgrad, nn_real learning_rate) 
-{
-    int err;
-
-    // compute new weights with mat-mat subtraction
-    err = caller_matrix_addition(dnn.d_W[0], 
-                                 dgrad.d_dW[0], 
-                                 -1.0*learning_rate, 
-                                 dgrad.H1, 
-                                 dgrad.H0); 	
-    
-    if (err != 0) { 
-	    std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-    err = caller_matrix_addition(dnn.d_W[1], 
-                                 dgrad.d_dW[1], 
-                                 -1.0*learning_rate, 
-                                 dgrad.H2,
-                                 dgrad.H1); 	
-    
-    if (err != 0) { 
-	    std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-    // compute new bias with vec-vec subtraction
-    err = caller_matrix_addition(dnn.d_b[0], 
-                                 dgrad.d_db[0], 
-                                 -1.0*learning_rate, 
-                                 dgrad.H1, 
-                                 1); 	
-    
-    if (err != 0) { 
-	    std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-    err = caller_matrix_addition(dnn.d_b[1], 
-                                 dgrad.d_db[1], 
-                                 -learning_rate, 
-                                 dgrad.H2, 
-                                 1); 	
-    
-    if (err != 0) { 
-	    std::cout << "Error in kernel. Error code: " << err << std::endl;
-    }
-
-}
 
 /*
  * Train the neural network &nn of rank 0 in parallel. Your MPI implementation
@@ -607,6 +637,7 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
       /////////////////////////////////////////////////////////////////////////////
       // 1. Subdivide input batch of images and `MPI_scatter()' to each MPI node //
       /////////////////////////////////////////////////////////////////////////////
+      
       // resolve batch size
       int last_col = std::min((batch + 1) * batch_size - 1, N - 1);
       int batch_size_adj = std::min(batch_size, N - (batch*batch_size));
@@ -614,17 +645,26 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
       arma::Mat<nn_real> X_batch = X.cols(batch * batch_size, last_col);
       arma::Mat<nn_real> y_batch = y.cols(batch * batch_size, last_col);
 
+
       /////////////////////////////////////////////////////////////////////////////
       // 2. Compute each sub-batch of images' contribution to network coefficient//
       /////////////////////////////////////////////////////////////////////////////
 
-      // copy across memory
+      // copy nn to device
       dnn.toGPU(nn);
 
-      cudaMemcpy(dcache.d_X, X_batch.memptr(), sizeof(nn_real) * X.n_rows * batch_size_adj, cudaMemcpyHostToDevice); 
+      // copy X_batch to device
+      cudaMemcpy(dcache.d_X, 
+                 X_batch.memptr(), 
+                 sizeof(nn_real) * X.n_rows * batch_size_adj, 
+                 cudaMemcpyHostToDevice); 
       check_launch("memcpy d_X");
 
-      cudaMemcpy(dcache.d_y, y_batch.memptr(), sizeof(nn_real) * y.n_rows * batch_size_adj, cudaMemcpyHostToDevice); 
+      // copy y_batch to device
+      cudaMemcpy(dcache.d_y, 
+                 y_batch.memptr(), 
+                 sizeof(nn_real) * y.n_rows * batch_size_adj, 
+                 cudaMemcpyHostToDevice); 
       check_launch("memcpy d_y");
       
       // feed forward
@@ -632,9 +672,14 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
 
       // back propagation
       parallel_backprop(dnn, dcache, dgrad, reg);
+
+      // TODO: Do I need loss and norm functions here?
+      // ...
+      // ...
      
-      // graident descent
+      // gradient descent
       parallel_descent(dnn, dgrad, learning_rate);
+
 
       /////////////////////////////////////////////////////////////////////////////
       // 3. Reduce coefficient updates and broadcast  with`MPI_Allreduce()       //
@@ -657,12 +702,11 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
 
       if (debug && rank == 0 && print_flag) {
         // TODO Copy data back to the CPU
-	dnn.fromGPU(nn);
+	      dnn.fromGPU(nn);
 
         /* The following debug routine assumes that you have already updated the
          arma matrices in the NeuralNetwork nn.  */
-        
-	save_gpu_error(nn, iter, error_file);
+	      save_gpu_error(nn, iter, error_file);
       }
 
       iter++;

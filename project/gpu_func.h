@@ -18,8 +18,10 @@ struct d_cache {
     nn_real* d_X;
     nn_real* d_y;
     nn_real* d_yc;
-    nn_real* d_z[2];
-    nn_real* d_a[2];
+    nn_real* d_z0;
+	nn_real* d_z1;
+    nn_real* d_a0;
+	nn_real* d_a1;
 
     // tmp vars
     nn_real* d_diff;
@@ -43,8 +45,10 @@ struct d_grads {
 	int batch_size;
 	int H0; int H1; int H2;
   
-    nn_real* d_dW[2];
-    nn_real* d_db[2];
+    nn_real* d_dW0;
+	nn_real* d_dW1;
+    nn_real* d_db0;
+	nn_real* d_db1;
     
     d_grads(int* dims);
     ~d_grads();
