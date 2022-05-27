@@ -8,6 +8,8 @@
 #include <cstring>
 #include <string>
 #include <iostream>
+#include <fstream>
+#include <iomanip>
 #include <vector>
 #include <armadillo>
 
@@ -15,9 +17,9 @@
 #include "gpu_func.h"
 #include "mpi.h"
 
-#define DEBUG 0
+#define DEBUG 1
 #define DEBUG_FFORWARD 0
-#define DEBUG_BACKPROP 0
+#define DEBUG_BACKPROP 1
 
 #define MPI_SAFE_CALL(call)                                                  \
   do {                                                                       \
@@ -66,22 +68,23 @@ d_NeuralNetwork::d_NeuralNetwork(NeuralNetwork& nn)
 	: layers(nn.num_layers), H0(nn.H[0]), H1(nn.H[1]), H2(nn.H[2])
 {
   // memory management for nnet 
-  cudaMalloc(&d_W0, sizeof(nn_real) * nn.H[0]*nn.H[1]); 
+  cudaMalloc(&d_W0, sizeof(nn_real) * H0 * H1); 
   check_launch("malloc d_W0");
   
-  cudaMalloc(&d_W1, sizeof(nn_real) * nn.H[1]*nn.H[2]);
+  cudaMalloc(&d_W1, sizeof(nn_real) * H1 * H2);
   check_launch("malloc d_W1");
 
-  cudaMalloc(&d_b0, sizeof(nn_real) * nn.H[1]);
+  cudaMalloc(&d_b0, sizeof(nn_real) * H1);
   check_launch("malloc d_b0");
   
-  cudaMalloc(&d_b1, sizeof(nn_real) * nn.H[2]);
+  cudaMalloc(&d_b1, sizeof(nn_real) * H2);
   check_launch("malloc d_b1");
 
 }
 
 // Free memory on device
 d_NeuralNetwork::~d_NeuralNetwork() {
+  // std::cout << "d_NeuralNetwork destructor called!" << std::endl;
   cudaFree(d_W0);
   cudaFree(d_W1);
   cudaFree(d_b0);
@@ -251,7 +254,7 @@ void parallel_feedforward(d_NeuralNetwork& dnn, d_cache& dcache)
 
     // compute z2 with linear transform
     err = caller_linear_transform(dnn.d_W1, 
-                                  dcache.d_X, 
+                                  dcache.d_a0, 
                                   dnn.d_b1, 
                                   dcache.d_z1, 
                                   1, 1, 
@@ -478,6 +481,10 @@ void train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
     memcpy(nn2.W[1].memptr(), nn.W[1].memptr(), sizeof(nn_real)*nn.H[1]*nn.H[2]); 
     memcpy(nn2.b[0].memptr(), nn.b[0].memptr(), sizeof(nn_real)*nn.H[1]); 
     memcpy(nn2.b[1].memptr(), nn.b[1].memptr(), sizeof(nn_real)*nn.H[2]); 
+    std::cout << "d_W[0]: " << nn.W[0][10] << " " << nn.W[0][20] << std::endl;
+    std::cout << "d_W[1]: " << nn.W[1][10] << " " << nn.W[0][20] << std::endl;
+    std::cout << "d_b[0]: " << nn.b[0][10] << " " << nn.W[0][20] << std::endl;
+    std::cout << "d_b[1]: " << nn.b[1][10] << " " << nn.W[0][20] << std::endl;
 
     // dnn2 on device
     int dims[4] = {nn.H[0], nn.H[1], nn.H[2], batch_size};
@@ -485,7 +492,8 @@ void train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
     d_cache dcache2(dims);
     d_grads dgrad2(dims);
 
-    std::string filename = "debug_ff.out";
+    std::string filename = "debug_ff.out";   
+
   #endif
 
   for (int epoch = 0; epoch < epochs; ++epoch) {
@@ -500,44 +508,156 @@ void train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
       feedforward(nn, X_batch, bpcache);
       
       #if DEBUG_FFORWARD
-        std::cout << "starting debug routine #1 ..." << std::endl;
-        dnn2.toGPU(nn);
+        if (epoch ==0 && batch == 0) {
+          std::cout << "starting debug routine #1 ..." << std::endl;
+          dnn2.toGPU(nn2);
 
-        int batch_size_adj = std::min(batch_size, N - (batch*batch_size));
-        cudaMemcpy(dcache2.d_X, X_batch.memptr(), sizeof(nn_real) * X.n_rows * batch_size_adj, cudaMemcpyHostToDevice); 
-        cudaMemcpy(dcache2.d_y, y_batch.memptr(), sizeof(nn_real) * y.n_rows * batch_size_adj, cudaMemcpyHostToDevice); 
-        std::cout << "copied data to device ... " << std::endl;
-        
-        parallel_feedforward(dnn2, dcache2);
-        std::cout << "completed feedforward" << std::endl;
+          int batch_size_adj = std::min(batch_size, N - (batch*batch_size));
+          cudaMemcpy(dcache2.d_X, X_batch.memptr(), sizeof(nn_real) * X.n_rows * batch_size_adj, cudaMemcpyHostToDevice); 
+          cudaMemcpy(dcache2.d_y, y_batch.memptr(), sizeof(nn_real) * y.n_rows * batch_size_adj, cudaMemcpyHostToDevice); 
+          std::cout << "copied data to device ... " << std::endl;
 
-        dnn2.fromGPU(nn2);
-        std::cout << "retrieved parameters ..." << std::endl;
-        
-        int error = checkNNErrors(nn2, nn, filename);
-        // std::cout << "Debug ff result: " << error << std::endl;
+          parallel_feedforward(dnn2, dcache2);
+          std::cout << "completed feedforward" << std::endl;
+
+          dnn2.fromGPU(nn2);
+          std::cout << "retrieved parameters ..." << std::endl;
+          std::cout << "d_W[0]: " << nn2.W[0][10] << " " << nn2.W[0][20] << std::endl;
+          std::cout << "d_W[1]: " << nn2.W[1][10] << " " << nn2.W[0][20] << std::endl;
+          std::cout << "d_b[0]: " << nn2.b[0][10] << " " << nn2.W[0][20] << std::endl;
+          std::cout << "d_b[1]: " << nn2.b[1][10] << " " << nn2.W[0][20] << std::endl;
+
+          nn_real* z0_test;
+          z0_test = (nn_real*)malloc(sizeof(nn_real)*nn.H[1]*batch_size);
+          cudaMemcpy(z0_test, dcache2.d_z0, sizeof(nn_real)*nn.H[1]*batch_size, cudaMemcpyDeviceToHost);
+          std::cout << "retrieved activation values ..." << std::endl;
+          for (int i = 0; i < 5; ++i) {
+            std::cout << "z0: " << std::setprecision(6) << bpcache.z[0](i, 0) << " vs " << z0_test[i] << std::endl;
+          }
+
+          nn_real* a0_test;
+          a0_test = (nn_real*)malloc(sizeof(nn_real)*nn.H[1]*batch_size);
+          cudaMemcpy(a0_test, dcache2.d_a0, sizeof(nn_real)*nn.H[1]*batch_size, cudaMemcpyDeviceToHost);
+          std::cout << "retrieved activation values ..." << std::endl;
+          for (int i = 0; i < 5; ++i) {
+            std::cout << "a0: " << std::setprecision(6) << bpcache.a[0](i, 0) << " vs " << a0_test[i] << std::endl;
+          }
+
+          nn_real* z1_test;
+          z1_test = (nn_real*)malloc(sizeof(nn_real)*nn.H[2]*batch_size);
+          cudaMemcpy(z1_test, dcache2.d_z1, sizeof(nn_real)*nn.H[2]*batch_size, cudaMemcpyDeviceToHost);
+          std::cout << "retrieved activation values ..." << std::endl;
+          for (int i = 0; i < 5; ++i) {
+            std::cout << "z1: " << std::setprecision(6) << bpcache.z[1](i, 0) << " vs " << z1_test[i] << std::endl;
+          }
+
+          nn_real* yc_test;
+          yc_test = (nn_real*)malloc(sizeof(nn_real)*nn.H[2]*batch_size);
+          cudaMemcpy(yc_test, dcache2.d_yc, sizeof(nn_real)*nn.H[2]*batch_size, cudaMemcpyDeviceToHost);
+          std::cout << "retrieved activation values ..." << std::endl;
+          for (int i = 0; i < 5; ++i) {
+            std::cout << "yc: " << std::setprecision(6) << bpcache.yc(i, 0) << " vs " << yc_test[i] << std::endl;
+          }
+
+          int error = 0;
+          std::vector<nn_real> errors_w;
+          std::vector<nn_real> errors_yc;
+          // std::vector<nn_real> errors_a;
+          // std::vector<nn_real> errors_z;
+          std::ofstream ofs(filename.c_str()); 
+          for (int i = 0; i < nn.num_layers; i++) {
+            ofs << "Mismatches for W[" << i << "]" << std::endl;
+            error += checkErrors(nn.W[i], nn2.W[i], ofs, errors_w);
+            // error += checkErrors(bpcache.a[i], bpcache2.a[i], ofs, errors_a);
+            // error += checkErrors(bpcache.z[i], bpcache2.z[i], ofs, errors_z);
+            std::cout << "l2  norm of diff b/w seq and par: W[" << i
+                      << "]: " << std::setprecision(6) << errors_w[2 * i + 1] << std::endl;
+                      // << " a[" << i << "]: " << errors_a[2 * i + 1] 
+                      // << " z[" << i << "]: " << errors_z[2 * i + 1] << std::endl;
+          }
+          // int error = checkNNErrors(nn2, nn, filename);
+          // std::cout << "Debug ff result: " << error << std::endl;
+        }
       #endif
 
       struct grads bpgrads;
       backprop(nn, y_batch, reg, bpcache, bpgrads);
 
       #if DEBUG_BACKPROP
-        std::cout << "starting debug routine #2 ..." << std::endl;
-        dnn2.toGPU(nn);
+        if (epoch ==0 && batch == 0) {
+          std::cout << "starting debug routine #2 ..." << std::endl;
+          dnn2.toGPU(nn2);
 
-        int batch_size_adj = std::min(batch_size, N - (batch*batch_size));
-        cudaMemcpy(dcache2.d_X, X_batch.memptr(), sizeof(nn_real) * X.n_rows * batch_size_adj, cudaMemcpyHostToDevice); 
-        cudaMemcpy(dcache2.d_y, y_batch.memptr(), sizeof(nn_real) * y.n_rows * batch_size_adj, cudaMemcpyHostToDevice); 
-        std::cout << "copied data to device ... " << std::endl;
+          int batch_size_adj = std::min(batch_size, N - (batch*batch_size));
+          cudaMemcpy(dcache2.d_X, X_batch.memptr(), sizeof(nn_real) * X.n_rows * batch_size_adj, cudaMemcpyHostToDevice); 
+          cudaMemcpy(dcache2.d_y, y_batch.memptr(), sizeof(nn_real) * y.n_rows * batch_size_adj, cudaMemcpyHostToDevice); 
+          std::cout << "copied data to device ... " << std::endl;
 
-        parallel_backprop(dnn2, dcache2, dgrad2, reg);
-        std::cout << "completed backprop ... " << std::endl;
+          parallel_feedforward(dnn2, dcache2);
+          std::cout << "completed feedforward ..." << std::endl;
 
-        dnn2.fromGPU(nn2);
-        std::cout << "retrieved parameters ..." << std::endl;
-        
-        int error = checkNNErrors(nn2, nn, filename);
-        // std::cout << "Debug ff result: " << error << std::endl;
+          parallel_backprop(dnn2, dcache2, dgrad2, reg);
+          std::cout << "completed backprop ... " << std::endl;
+
+          dnn2.fromGPU(nn2);
+          std::cout << "retrieved parameters ..." << std::endl;
+          std::cout << "d_W[0]: " << nn2.W[0][10] << " " << nn2.W[0][20] << std::endl;
+          std::cout << "d_W[1]: " << nn2.W[1][10] << " " << nn2.W[0][20] << std::endl;
+          std::cout << "d_b[0]: " << nn2.b[0][10] << " " << nn2.W[0][20] << std::endl;
+          std::cout << "d_b[1]: " << nn2.b[1][10] << " " << nn2.W[0][20] << std::endl;
+
+          nn_real* dW1_test;
+          dW1_test = (nn_real*)malloc(sizeof(nn_real)*nn.H[2]*nn.H[1]);
+          cudaMemcpy(dW1_test, dgrad2.d_dW1, sizeof(nn_real)*nn.H[2]*nn.H[1], cudaMemcpyDeviceToHost);
+          std::cout << "retrieved activation values ..." << std::endl;
+          for (int i = 0; i < 5; ++i) {
+            std::cout << "dW1: " << std::setprecision(6) << bpgrads.dW[1](i, 0) << " vs " << dW1_test[i] << std::endl;
+          }
+
+          nn_real* db1_test;
+          db1_test = (nn_real*)malloc(sizeof(nn_real)*nn.H[2]);
+          cudaMemcpy(db1_test, dgrad2.d_db1, sizeof(nn_real)*nn.H[2], cudaMemcpyDeviceToHost);
+          std::cout << "retrieved activation values ..." << std::endl;
+          // std::cout << "db1: " << std::setprecision(6) << bpgrads.db[1],n_elem << " vs " << sizeof(db1_test)/sizeof(db1_test[0]) << std::endl;
+          for (int i = 0; i < 5; ++i) {
+            std::cout << "db1: " << std::setprecision(6) << bpgrads.db[1](i) << " vs " << db1_test[i] << std::endl;
+          }
+
+          nn_real* dW0_test;
+          dW0_test = (nn_real*)malloc(sizeof(nn_real)*nn.H[1]*nn.H[0]);
+          cudaMemcpy(dW0_test, dgrad2.d_dW0, sizeof(nn_real)*nn.H[1]*nn.H[0], cudaMemcpyDeviceToHost);
+          std::cout << "retrieved activation values ..." << std::endl;
+          for (int i = 0; i < 5; ++i) {
+            std::cout << "dW0: " << std::setprecision(6) << bpgrads.dW[0](i, 0) << " vs " << dW0_test[i] << std::endl;
+          }
+
+          nn_real* db0_test;
+          db0_test = (nn_real*)malloc(sizeof(nn_real)*nn.H[1]);
+          cudaMemcpy(db0_test, dgrad2.d_db0, sizeof(nn_real)*nn.H[1], cudaMemcpyDeviceToHost);
+          std::cout << "retrieved activation values ..." << std::endl;
+          for (int i = 0; i < 5; ++i) {
+            std::cout << "db0: " << std::setprecision(6) << bpgrads.db[0](i) << " vs " << db0_test[i] << std::endl;
+          }
+
+          int error = 0;
+          std::vector<nn_real> errors_w;
+          std::vector<nn_real> errors_yc;
+          // std::vector<nn_real> errors_a;
+          // std::vector<nn_real> errors_z;
+          std::ofstream ofs(filename.c_str()); 
+          for (int i = 0; i < nn.num_layers; i++) {
+            ofs << "Mismatches for W[" << i << "]" << std::endl;
+            error += checkErrors(nn.W[i], nn2.W[i], ofs, errors_w);
+            // error += checkErrors(bpcache.a[i], bpcache2.a[i], ofs, errors_a);
+            // error += checkErrors(bpcache.z[i], bpcache2.z[i], ofs, errors_z);
+            std::cout << "l2  norm of diff b/w seq and par: W[" << i
+                      << "]: " << std::setprecision(6) << errors_w[2 * i + 1] << std::endl;
+                      // << " a[" << i << "]: " << errors_a[2 * i + 1] 
+                      // << " z[" << i << "]: " << errors_z[2 * i + 1] << std::endl;
+          }
+          // int error = checkNNErrors(nn2, nn, filename);
+          // std::cout << "Debug ff result: " << error << std::endl;
+        }
       #endif
 
       if (print_every > 0 && iter % print_every == 0) {
@@ -612,7 +732,9 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
   int dims[4] = {nn.H[0], nn.H[1], nn.H[2], batch_size};
 
   /* TODO Allocate memory before the iterations */
+  std::cout << "starting parallel pipeline" << std::endl;
   d_NeuralNetwork dnn(nn);
+  std::cout << "made it!" << std::endl;
   d_cache dcache(dims);
   d_grads dgrad(dims);
 

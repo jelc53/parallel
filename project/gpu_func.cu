@@ -82,30 +82,31 @@ d_cache::~d_cache() {
 }
 
 void d_cache::toGPU(cache& bpcache) {
-  cudaMemcpy(d_z0, bpcache.z[0].memptr(), sizeof(nn_real) * H1*batch_size, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_z0, bpcache.z[0].memptr(), sizeof(nn_real) * H1*bpcache.z[0].n_cols, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_a0");
 
-  cudaMemcpy(d_z1, bpcache.z[1].memptr(), sizeof(nn_real) * H2*batch_size, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_z1, bpcache.z[1].memptr(), sizeof(nn_real) * H2*bpcache.z[0].n_cols, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_a1");
 
-  cudaMemcpy(d_a0, bpcache.a[0].memptr(), sizeof(nn_real) * H1*batch_size, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_a0, bpcache.a[0].memptr(), sizeof(nn_real) * H1*bpcache.z[0].n_cols, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_a0");
 
-  cudaMemcpy(d_a1, bpcache.a[1].memptr(), sizeof(nn_real) * H2*batch_size, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_a1, bpcache.a[1].memptr(), sizeof(nn_real) * H2*bpcache.z[0].n_cols, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_a1");
 
-  cudaMemcpy(d_yc, bpcache.yc.memptr(), sizeof(nn_real) * H2*batch_size, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_yc, bpcache.yc.memptr(), sizeof(nn_real) * H2*bpcache.z[0].n_cols, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_yc");
 
 }
 
 void d_cache::fromGPU(cache& bpcache) {
+   printf("made it to fromGPU in dcache");
     
-  cudaMemcpy(bpcache.z[0].memptr(), d_z0, sizeof(nn_real) * H1*batch_size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpcache.z[1].memptr(), d_z1, sizeof(nn_real) * H2*batch_size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpcache.a[0].memptr(), d_a0, sizeof(nn_real) * H1*batch_size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpcache.a[1].memptr(), d_a1, sizeof(nn_real) * H2*batch_size, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpcache.yc.memptr(), d_yc, sizeof(nn_real) * H2*batch_size, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.z[0].memptr(), d_z0, sizeof(nn_real) * H1*bpcache.z[0].n_cols, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.z[1].memptr(), d_z1, sizeof(nn_real) * H2*bpcache.z[0].n_cols, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.a[0].memptr(), d_a0, sizeof(nn_real) * H1*bpcache.z[0].n_cols, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.a[1].memptr(), d_a1, sizeof(nn_real) * H2*bpcache.z[0].n_cols, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.yc.memptr(), d_yc, sizeof(nn_real) * H2*bpcache.z[0].n_cols, cudaMemcpyDeviceToHost);
 
 }
 
