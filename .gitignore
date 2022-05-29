@@ -36,5 +36,8 @@
 *.log
 *.out
 
+# Nvidia profiler
+*rep
+
 # Jupyter
 .ipynb_checkpoints/

@@ -1,0 +1,10 @@
+Warning: LBR backtrace method is not supported on this platform. DWARF backtrace method will be used.
+WARNING: OpenMPI or MPICH tracing relies on NVTX. NVTX tracing has been automatically enabled.
+Collecting data...
+Processing events...
+Saving temporary "/tmp/nsys-report-f093-93d8-305e-380c.qdstrm" file to disk...
+Creating final output files...
+
+Processing [0%                                                                ]Processing [1%                                                                ]Processing [2%                                                                ]Processing [=6%                                                               ]Processing [====12%                                                           ]Processing [========18%                                                       ]Processing [=============25%                                                  ]Processing [=================31%                                              ]Processing [======================38%                                         ]Processing [==========================44%                                     ]Processing [==============================51%                                 ]Processing [==================================57%                             ]Processing [=======================================64%                        ]Processing [===========================================70%                    ]Processing [============================================72%                   ]Processing [==============================================75%                 ]Processing [==============================================================100%]
+Saved report file to "/tmp/nsys-report-f093-93d8-305e-380c.qdrep"
+Report file moved to "/home/jelc/cme213-para/project/nsys.qdrep"

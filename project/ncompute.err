@@ -1,0 +1,5 @@
+utils/neural_network_util.cpp(@149): Loading from file /home/jelc/cme213-para/project/results//seq_epoch-W0-0-1.mat
+utils/neural_network_util.cpp(@156): Loading from file /home/jelc/cme213-para/project/results//seq_epoch-W1-0-1.mat
+utils/neural_network_util.cpp(@163): Loading from file /home/jelc/cme213-para/project/results//seq_epoch-b0-0-1.mat
+utils/neural_network_util.cpp(@170): Loading from file /home/jelc/cme213-para/project/results//seq_epoch-b1-0-1.mat
+slurmstepd-icmet02: error: *** JOB 51827 ON icmet02 CANCELLED AT 2022-05-29T07:17:39 DUE TO TIME LIMIT ***
