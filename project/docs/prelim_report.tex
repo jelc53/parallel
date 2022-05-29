@@ -111,11 +111,23 @@ of genralized matrix multiplication! We want to take existing sequential code an
 parallelize each using cuda code from part 1.
 
 \begin{itemize}
-    \item \textbf{Feed forward.} ...
+    \item \textbf{Feed forward.} Returns matrix \texttt{yc} from passing input images
+    start to finish through the neural network layers. Here we parallelize the operations
+    that compute activations of all neurons as well as the final softmax function. The 
+    activations in aprticular are expensive to compute and essentially boil down to being 
+    matrix-matrix multiplications. 
 
-    \item \textbf{Back propagation.} ...
+    \item \textbf{Back propagation.} Returns gradients \texttt{dW} and \texttt{db} from 
+    passing the difference between \texttt{yc} and our target \texttt{y} back through the 
+    neural network. Again we parallelize the core matrix operations involved, including
+    transpose and matrix multiplication.
 
-    \item \textbf{Gradient descent.} ...
+    \item \textbf{Gradient descent.} Returns updated neural network parameters (weights 
+    \texttt{W} and biases \texttt{b}). This is a simple application of our graidents from 
+    bakc propagation multiplied with a chosen learning rate. While I have parallelized this
+    step, it is not clearly beneficial due to the MPI host-device back and forth required 
+    to sum partial gradients across processes before gradient descent. 
+
 \end{itemize}
 
 \begin{verbatim}
@@ -201,10 +213,10 @@ l2  norm of diff b/w seq and par: W[1]: 7.5405e-08, b[1]: 1.77756e-07
 
 \textbf{Remarks on debgugging.} This step required significant debugging effort given 
 the inherent complexity of indexing many different variations of parallel matrix 
-operations. My approach here was to add \texttt{#if} and \texttt{#endif} statements 
+operations. My approach here was to add \texttt{\#if} and \texttt{\#endif} statements 
 after each major step of the sequential algorithm and try to reproduce that step using 
 my parallel code. To test whether the two implementations matched, I re-used existing 
-\texttt{checkErrors} and \textt{checkNNErrors} from the provided starter code test suite.
+\texttt{checkErrors} and \texttt{checkNNErrors} from the provided starter code test suite.
 
 
 \paragraph{Part 3: Parallelize Training Batches (Multiple GPUs)} Idea: while each epoch 
@@ -212,33 +224,145 @@ needs to be executed sequentially, we can perform forwards and backwards propaga
 batches within each epoch independently (and therefore in parallel). Our code from part 
 2 should already make good use of hardware resources on a single GPU, however, in this 
 project we have access to multiple GPUs! We use MPI to help coordinate sending different
-training batches to different GPUs as well as receiving back and aggregating outputs from
-each batch.
+training batches ('mini batches') to different GPUs as well as receiving back and 
+aggregating outputs from each batch.
 
-...
-...
+Steps implemented:
+\begin{itemize}
+    \item \textbf{MPI\_Scatter.} We use \texttt{MPI\_Scatter} to distribute mini batches
+    of input images X and one-hot encoded target variables y across our 4 processes. 
+    Each process then conducts its own feed forward and back propagation on its 
+    respective minibatch of images and produces a set of partial gradients for 
+    weights and biases.
 
-\begin{cpp}
-    ...
-    ...
-\end{cpp}
+    \item \textbf{MPI\_AllReduce.} We use \texttt{MPI\_AllReduce} to sum our partial 
+    gradients that have been computed across our 4 processes together and broadcast 
+    combined output back to all processes. To do this, we first needed to copy the 
+    partial gradients from device to host of each process. Gradient descent can then 
+    be computed on all processes (a bit wasteful) to update our neural network 
+    parameters (weights and biases).
+
+    Note: We needed to be careful to avoid accidentally scaling our gradients and 
+    regularization term by the number of processes.
+\end{itemize}
+
+\begin{verbatim}
+
+Output from code
+----------------
+* Mode 1 *
+Time for Parallel Training: 6.56678 seconds
 
 
-\paragraph{Part 4: Profiling Parallel Code} Idea: use NVIDIA's Insight and Compute Systems
-tool to interrogate performance of code and assess how to improve.
+* Mode 2 *
+Time for Parallel Training: 2.03137 seconds
 
-Insert profile screenshots ...
-... something about focusing on arithmetic intensity
-... also latency bound vs memory bound vs compute bound
+* Mode 3 *
+Time for Parallel Training: 0.69288 seconds
+\end{verbatim}
+
+The above runtime statistics show an improvement for mode 1 (epochs = 40) but actually
+a decrease in performance for mode 3 (epochs = 1). This is because we incur a lot of
+MPI setup overhead regardless but do not compute enough iterations to benefit from 
+distributing across 4 GPUs (processes).
+
+
+\paragraph{Part 4: Profiling Parallel Code} Idea: use NVIDIA's Nsight Systems and Nsight
+Compute sofwtware tool to interrogate performance of code and assess how to improve.
+
+\textbf{Nsight Systems:} Used this software to look across the whole program timeline 
+and identify the largest relative sources of performance loss.
+
+First takeaway from looking at Nsight Systems timeline was how expensive our 
+\texttt{cudaMalloc} and \texttt{MPI\_Bcast} setup operations were compared to the 
+neural network training itself. 
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[scale=0.4]{nsight_systems_overview.png}
+    \caption{Nsight Systems timeline of entire program for single epoch}
+\end{figure}
+
+Second takeaway was relative expense of \texttt{MPI\_Scatter} and \texttt{cudaMemcpy}
+operations compared with our feed forward, back propagation and gradient descent kernels.
+To me this highlights the importance to reducing the number of movements to and from the 
+device, especially within the batch loops as is currently the case for X and y as well 
+as gradients pre and post \texttt{MPI\_AllReduce}. It might even be worth eliminating 
+the GPU parallel code for graident descent to avoid this!
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[scale=0.4]{nsight_systems_batch.png}
+    \caption{Nsight Systems timeline for training of one image batch}
+\end{figure}
+
+Third takeaway was that our generalized matrix multiplication kernel was 3-4x the time 
+cost of any other matrix operation kernel in our program. While this looks to be small 
+here compared to data transfers, this becomes relevant when we want to train the neural 
+network over 40 epochs.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[scale=0.4]{nsight_systems_kernels.png}
+    \caption{Nsight Systems relative time cost of all matrix kernels}
+\end{figure}
+
+
+\textbf{Nsight Compute:} Used this software to take a deeper look into the performance of 
+individual kernels. In particular, our generalized matrix multiplication kernel.
+
+Fourth takeaway was that we are still very much latency bound. Both our Compute and Memory
+utilizations were far too low: 5.93\% and 22.56\% repectively. Goal here to is to increase 
+utilization to ultimately increase arithmetic intensity. 
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[scale=0.5]{nsight_compute_sol.png}
+    \caption{Nsight Compute speed of light results for GEMM kernel}
+\end{figure}
+
+Fifth takeaway was we can immediately improve the launch configuration for this kernel.
+We currently use a grid sizae of 25 which is far less than the GPU's 72 multiprocessors.
+To improve we will want to increase the grid size to fully utilize available hardware.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[scale=0.5]{nsight_compute_lao.png}
+    \caption{Nsight Compute launch statistics and occupancy for GEMM kernel}
+\end{figure}
 
 
 Ideas to improve performance:
 \begin{itemize}
-    \item \textbf{Matrix multiplication.} ...
+    \item \textbf{Matrix multiplication.} Currently my generalized matrix multplication 
+    is implemented such that each thread computes just one output value. This is super 
+    inefficient since each thread needs to collect a bunch of data from global memory 
+    (entire row of one matrix and column of the next) to do this one computation, 
+    whereas if we asked the thread to compute a small block of values, it could 
+    re-use much of its global memory request across these. 
 
-    \item \textbf{Kernel usage.} ...
+    Additionally, we could store sections of the input matrices in shared memory to 
+    make use of the increased bandwidth vs global memory associated with being 
+    closer to the processing units.
 
-    \item \textbf{Batching logic.} ... 
+    \item \textbf{Kernel usage.} I run a separate kernel for every individual compute 
+    step. This means our kernels can be qutie generic (e.g. matrix multiplication, 
+    matrix addition) which is great for debugging, but also means we spin up a lot 
+    of separate kernels for each training cycle. It might be more effiicent to write 
+    one kernel that handles multiple steps at once to reduce communication back and 
+    forth (e.g. a feed forward kernel vs matrix multiplication kernel). 
+    
+    \item \textbf{Device memory allocation.} I allocate memory on the device for a 
+    bunch of temporary variables to assist with intermediate calculations during 
+    feed forward and back propagation steps. Looking at the profiler output, these 
+    malloc steps are quite expensive and I imagine there are a number of optimization
+    opportunities here to cut down on teh number of additional temporary variables
+    by overwriting existing cache variables rather than write to new. 
+
+    \item \textbf{Batching logic.} A more ambitious optimization might be to change 
+    how I split work across my 4 GPUs (processes). Currently I divide each batch 
+    into 'mini batches', however, instead I could think about dividing my model 
+    parameters (weights and biases) across the different processes. 
 
 \end{itemize}
 

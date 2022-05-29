@@ -998,7 +998,7 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
   
 
       /////////////////////////////////////////////////////////////////////////////
-      // 3. Reduce coefficient updates and broadcast  with`MPI_Allreduce()       //
+      // 3. Reduce coefficient updates and broadcast  with `MPI_Allreduce()      //
       /////////////////////////////////////////////////////////////////////////////
 
       // copy gradients back to host
