@@ -389,7 +389,7 @@ void parallel_backprop(d_NeuralNetwork& dnn, d_cache& dcache, d_grads& dgrad, nn
 	    std::cout << "Error in kernel. Error code: " << err << std::endl;
     }
 
-    // compute dW[0] with gemm
+    // compute dW[0] with reg
     err = caller_oop_gemm(dcache.d_dz1, 
                           dcache.d_XT,
                           dnn.d_W0,
@@ -461,6 +461,79 @@ void parallel_descent(d_NeuralNetwork& dnn, d_grads& dgrad, nn_real learning_rat
 	    std::cout << "Error in kernel. Error code: " << err << std::endl;
     }
 
+}
+
+void parallel_normalize_gradients(d_grads& dgrads, int divisor) 
+{
+    int err;
+
+    // normalize dW1 by 1.0 / batch_size
+    err = caller_scalar_multiply(dgrads.d_dW1, 
+                                 1.0 / divisor, 
+                                 dgrads.H2, 
+                                 dgrads.H1); 	
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // normalize dW0 by 1.0 / batch_size
+    err = caller_scalar_multiply(dgrads.d_dW0, 
+                                 1.0 / divisor, 
+                                 dgrads.H1, 
+                                 dgrads.H0); 	
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // normalize db1 by 1.0 / batch_size
+    err = caller_scalar_multiply(dgrads.d_db1, 
+                                 1.0 / divisor, 
+                                 dgrads.H2, 
+                                 1); 	
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // normalize db0 by 1.0 / batch_size
+    err = caller_scalar_multiply(dgrads.d_db0, 
+                                 1.0 / divisor, 
+                                 dgrads.H1, 
+                                 1); 	
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+}
+
+
+void parallel_regularization(d_NeuralNetwork& dnn, d_grads& dgrads, nn_real reg) 
+{
+    int err;
+
+    // update dW1 for regularization
+    err = caller_matrix_addition(dgrads.d_dW1, 
+                                 dnn.d_W1, 
+                                 reg, 
+                                 dgrads.H2, 
+                                 dgrads.H1); 	
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
+
+    // update dW0 for regularization
+    err = caller_matrix_addition(dgrads.d_dW0, 
+                                 dnn.d_W0, 
+                                 reg, 
+                                 dgrads.H1, 
+                                 dgrads.H0); 	
+    
+    if (err != 0) { 
+	    std::cout << "Error in kernel. Error code: " << err << std::endl;
+    }
 }
 
 
@@ -780,6 +853,15 @@ void train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
   }
 }
 
+int get_batch_size(int N, int batch_size, int batch) {
+  int num_batches = (N + batch_size - 1) / batch_size;
+  return (batch == num_batches - 1) ? N - batch_size * batch : batch_size;
+}
+
+int get_mini_batch_size(int batch_size, int num_procs, int rank) {
+  int mini_batch_size = batch_size / num_procs;
+  return rank < batch_size % num_procs ? mini_batch_size + 1 : mini_batch_size;
+}
 
 /*
  * Train the neural network &nn of rank 0 in parallel. Your MPI implementation
@@ -790,12 +872,13 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
                     std::ofstream& error_file, 
                     nn_real reg, const int epochs, const int batch_size,
                     int print_every, int debug) {
+  #define ROOT 0
   int rank, num_procs;
   MPI_SAFE_CALL(MPI_Comm_size(MPI_COMM_WORLD, &num_procs));
   MPI_SAFE_CALL(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
 
-  int N = (rank == 0) ? X.n_cols : 0;
-  MPI_SAFE_CALL(MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD));
+  int N = (rank == ROOT) ? X.n_cols : 0;
+  MPI_SAFE_CALL(MPI_Bcast(&N, 1, MPI_INT, ROOT, MPI_COMM_WORLD));
 
   int print_flag = 0;
 
@@ -816,6 +899,20 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
   // std::cout << "copying data to device" << std::endl;
   dnn.toGPU(nn);
 
+  // declarations on host for each process
+  arma::Mat<nn_real> X_batch;
+  arma::Mat<nn_real> y_batch;
+
+  nn_real* X_minibatch; 
+  nn_real* y_minibatch;
+
+  arma::Mat<nn_real> h_dW1(nn.H[2], nn.H[1]);
+  arma::Mat<nn_real> h_dW0(nn.H[1], nn.H[0]);
+
+  arma::Col<nn_real> h_db1(nn.H[2]);
+  arma::Col<nn_real> h_db0(nn.H[1]);
+
+
   /* iter is a variable used to manage debugging. It increments in the inner
      loop and therefore goes from 0 to epochs*num_batches */
   int iter = 0;
@@ -824,72 +921,176 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
     int num_batches = (N + batch_size - 1) / batch_size;
     
     for (int batch = 0; batch < num_batches; ++batch) {
-      /*
-       * TODO Possible Implementation:
-       * 1. subdivide input batch of images and `MPI_scatter()' to each MPI node
-       * 2. compute each sub-batch of images' contribution to network
-       * coefficient updates
-       * 3. reduce the coefficient updates and broadcast to all nodes with
-       * `MPI_Allreduce()'
-       * 4. update local network coefficient at each node
-       */
-      
+
       /////////////////////////////////////////////////////////////////////////////
       // 1. Subdivide input batch of images and `MPI_scatter()' to each MPI node //
       /////////////////////////////////////////////////////////////////////////////
       
-      // resolve batch size
+      // split data into batches
       // std::cout << "splitting data into batches" << std::endl;
-      int last_col = std::min((batch + 1) * batch_size - 1, N - 1);
-      
-      int batch_size_adj = std::min(batch_size, N - (batch*batch_size));
-      dcache.batch_size = batch_size_adj;
-      dgrad.batch_size = batch_size_adj;
+      if (rank == ROOT) {
+        int last_col = std::min((batch + 1) * batch_size - 1, N - 1);
+        X_batch = X.cols(batch * batch_size, last_col);
+        y_batch = y.cols(batch * batch_size, last_col);
+      }
 
-      arma::Mat<nn_real> X_batch = X.cols(batch * batch_size, last_col);
-      arma::Mat<nn_real> y_batch = y.cols(batch * batch_size, last_col);
+      // resolve mini batch size
+      int b_size = get_batch_size(N, batch_size, batch);
+      int mb_size = get_mini_batch_size(b_size, num_procs, rank);
+
+      // update cache and gradient batch size value
+      dcache.batch_size = mb_size;
+      dgrad.batch_size = mb_size;
+
+      // create a buffer that will hold X, y minibatch
+      X_minibatch = (nn_real*)malloc(sizeof(nn_real)*nn.H[0]*mb_size); 
+      y_minibatch = (nn_real*)malloc(sizeof(nn_real)*nn.H[2]*mb_size); 
+
+      // scatter mini batches of images to each MPI node
+      // std::cout << "mpi scatter X_batch into mini batches" << std::endl;
+      MPI_Scatter(X_batch.memptr(), 
+                  nn.H[0]*mb_size, 
+                  MPI_FP, 
+                  X_minibatch, 
+                  nn.H[0]*mb_size, 
+                  MPI_FP, 
+                  ROOT, 
+                  MPI_COMM_WORLD);
+
+      // std::cout << "mpi scatter y_batch into mini batches" << std::endl;
+      MPI_Scatter(y_batch.memptr(), 
+                  nn.H[2]*mb_size, 
+                  MPI_FP, 
+                  y_minibatch, 
+                  nn.H[2]*mb_size, 
+                  MPI_FP, 
+                  ROOT, 
+                  MPI_COMM_WORLD);
 
 
       /////////////////////////////////////////////////////////////////////////////
       // 2. Compute each sub-batch of images' contribution to network coefficient//
       /////////////////////////////////////////////////////////////////////////////
-
+      
       // copy X_batch to device
+      // std::cout << "copying X_minibatch to device" << std::endl;
       cudaMemcpy(dcache.d_X, 
-                 X_batch.memptr(), 
-                 sizeof(nn_real) * X.n_rows * batch_size_adj, 
+                 X_minibatch, 
+                 sizeof(nn_real)*nn.H[0]*mb_size, 
                  cudaMemcpyHostToDevice); 
       check_launch("memcpy d_X");
 
       // copy y_batch to device
+      // std::cout << "copying y_minibatch to device" << std::endl;
       cudaMemcpy(dcache.d_y, 
-                 y_batch.memptr(), 
-                 sizeof(nn_real) * y.n_rows * batch_size_adj, 
+                 y_minibatch, 
+                 sizeof(nn_real)*nn.H[2]*mb_size, 
                  cudaMemcpyHostToDevice); 
       check_launch("memcpy d_y");
-      
+
       // feed forward
       // std::cout << "executing feed forward" << std::endl;
       parallel_feedforward(dnn, dcache);
 
       // back propagation
       // std::cout << "executing back propagation" << std::endl;
-      parallel_backprop(dnn, dcache, dgrad, reg);
-     
-      // gradient descent
-      // std::cout << "executing gradient descent" << std::endl;
-      parallel_descent(dnn, dgrad, learning_rate);
-      
+      parallel_backprop(dnn, dcache, dgrad, 0.0);  // reg applied afterwards
+  
 
       /////////////////////////////////////////////////////////////////////////////
       // 3. Reduce coefficient updates and broadcast  with`MPI_Allreduce()       //
       /////////////////////////////////////////////////////////////////////////////
+
+      // copy gradients back to host
+      // std::cout << "copy gradients back to host" << std::endl;
+      cudaMemcpy(h_dW1.memptr(), 
+                 dgrad.d_dW1, 
+                 sizeof(nn_real)*nn.H[1]*nn.H[2], 
+                 cudaMemcpyDeviceToHost);
+
+      cudaMemcpy(h_dW0.memptr(), 
+                 dgrad.d_dW0, 
+                 sizeof(nn_real)*nn.H[0]*nn.H[1], 
+                 cudaMemcpyDeviceToHost);
+
+      cudaMemcpy(h_db1.memptr(), 
+                 dgrad.d_db1, 
+                 sizeof(nn_real)*nn.H[2], 
+                 cudaMemcpyDeviceToHost);
+
+      cudaMemcpy(h_db0.memptr(), 
+                 dgrad.d_db0, 
+                 sizeof(nn_real)*nn.H[1], 
+                 cudaMemcpyDeviceToHost);
+
+      // std::cout << "mpi allreduce for weights gradients" << std::endl;
+      MPI_Allreduce(MPI_IN_PLACE, 
+                    h_dW0.memptr(), 
+                    nn.H[0]*nn.H[1], 
+                    MPI_FP, 
+                    MPI_SUM, 
+                    MPI_COMM_WORLD);
+
+      MPI_Allreduce(MPI_IN_PLACE, 
+                    h_dW1.memptr(), 
+                    nn.H[1]*nn.H[2], 
+                    MPI_FP, 
+                    MPI_SUM, 
+                    MPI_COMM_WORLD);
+      
+      // std::cout << "mpi allreduce for bias gradients" << std::endl;
+      MPI_Allreduce(MPI_IN_PLACE, 
+                    h_db0.memptr(), 
+                    nn.H[1], 
+                    MPI_FP, 
+                    MPI_SUM, 
+                    MPI_COMM_WORLD);
+      
+      MPI_Allreduce(MPI_IN_PLACE, 
+                    h_db1.memptr(), 
+                    nn.H[2], 
+                    MPI_FP, 
+                    MPI_SUM, 
+                    MPI_COMM_WORLD);
+      
+      // copy gradients to device again
+      // std::cout << "copy gradients to device again" << std::endl;
+      cudaMemcpy(dgrad.d_dW1, 
+                 h_dW1.memptr(), 
+                 sizeof(nn_real)*nn.H[1]*nn.H[2], 
+                 cudaMemcpyHostToDevice); 
+      check_launch("memcpy d_dW1");
+
+      cudaMemcpy(dgrad.d_dW0, 
+                 h_dW0.memptr(), 
+                 sizeof(nn_real)*nn.H[0]*nn.H[1], 
+                 cudaMemcpyHostToDevice); 
+      check_launch("memcpy d_dW0");
+
+      cudaMemcpy(dgrad.d_db1, 
+                 h_db1.memptr(), 
+                 sizeof(nn_real)*nn.H[2], 
+                 cudaMemcpyHostToDevice); 
+      check_launch("memcpy d_db1");
+      
+      cudaMemcpy(dgrad.d_db0, 
+                 h_db0.memptr(), 
+                 sizeof(nn_real)*nn.H[1], 
+                 cudaMemcpyHostToDevice); 
+      check_launch("memcpy d_db0");
 
 
       /////////////////////////////////////////////////////////////////////////////
       // 4. Update local network coefficient at each node                        //
       /////////////////////////////////////////////////////////////////////////////
 
+      // gradient descent
+      // std::cout << "executing gradient descent" << std::endl;
+      parallel_normalize_gradients(dgrad, num_procs); 
+
+      parallel_regularization(dnn, dgrad, reg);
+
+      parallel_descent(dnn, dgrad, learning_rate);
 
       // +-*=+-*=+-*=+-*=+-*=+-*=+-*=+-*=+*-=+-*=+*-=+-*=+-*=+-*=+-*=+-*= //
       //                    POST-PROCESS OPTIONS                          //
@@ -899,7 +1100,7 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
       } else {
         print_flag = iter % print_every == 0;
       }
-
+  
       if (debug && rank == 0 && print_flag) {
         // TODO Copy data back to the CPU
 	      dnn.fromGPU(nn);

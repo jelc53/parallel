@@ -193,6 +193,13 @@ __global__
 void kernel_transpose(nn_real* A, nn_real* B, int M, int N);
 
 
+/* Scalar multiplication: A *= alpha */
+int caller_scalar_multiply(nn_real* A, nn_real alpha, int M, int N);
+
+__global__
+void kernel_scalar_multiply(nn_real* A, nn_real alpha, int M, int N);
+
+
 /* Sum across matrix rows: b = arma::sum(A, axis=1) */
 int caller_sum_matrix_rows(nn_real* A, nn_real* b, int M, int N);
 

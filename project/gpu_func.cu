@@ -81,33 +81,34 @@ d_cache::~d_cache() {
   
 }
 
-void d_cache::toGPU(cache& bpcache) {
-  cudaMemcpy(d_z0, bpcache.z[0].memptr(), sizeof(nn_real) * H1*bpcache.z[0].n_cols, cudaMemcpyHostToDevice); 
+void d_cache::toGPU(cache& bpcache) 
+{
+  int batch_size_adj = bpcache.z[0].n_cols;
+  cudaMemcpy(d_z0, bpcache.z[0].memptr(), sizeof(nn_real) * H1*batch_size_adj, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_a0");
 
-  cudaMemcpy(d_z1, bpcache.z[1].memptr(), sizeof(nn_real) * H2*bpcache.z[0].n_cols, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_z1, bpcache.z[1].memptr(), sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_a1");
 
-  cudaMemcpy(d_a0, bpcache.a[0].memptr(), sizeof(nn_real) * H1*bpcache.z[0].n_cols, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_a0, bpcache.a[0].memptr(), sizeof(nn_real) * H1*batch_size_adj, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_a0");
 
-  cudaMemcpy(d_a1, bpcache.a[1].memptr(), sizeof(nn_real) * H2*bpcache.z[0].n_cols, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_a1, bpcache.a[1].memptr(), sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_a1");
 
-  cudaMemcpy(d_yc, bpcache.yc.memptr(), sizeof(nn_real) * H2*bpcache.z[0].n_cols, cudaMemcpyHostToDevice); 
+  cudaMemcpy(d_yc, bpcache.yc.memptr(), sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_yc");
 
 }
 
-void d_cache::fromGPU(cache& bpcache) {
-   printf("made it to fromGPU in dcache");
-    
-  cudaMemcpy(bpcache.z[0].memptr(), d_z0, sizeof(nn_real) * H1*bpcache.z[0].n_cols, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpcache.z[1].memptr(), d_z1, sizeof(nn_real) * H2*bpcache.z[0].n_cols, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpcache.a[0].memptr(), d_a0, sizeof(nn_real) * H1*bpcache.z[0].n_cols, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpcache.a[1].memptr(), d_a1, sizeof(nn_real) * H2*bpcache.z[0].n_cols, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpcache.yc.memptr(), d_yc, sizeof(nn_real) * H2*bpcache.z[0].n_cols, cudaMemcpyDeviceToHost);
-
+void d_cache::fromGPU(cache& bpcache) 
+{  
+  int batch_size_adj = bpcache.z[0].n_cols;
+  cudaMemcpy(bpcache.z[0].memptr(), d_z0, sizeof(nn_real) * H1*batch_size_adj, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.z[1].memptr(), d_z1, sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.a[0].memptr(), d_a0, sizeof(nn_real) * H1*batch_size_adj, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.a[1].memptr(), d_a1, sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyDeviceToHost);
+  cudaMemcpy(bpcache.yc.memptr(), d_yc, sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyDeviceToHost);
 }
 
 
@@ -509,6 +510,34 @@ int caller_transpose(nn_real* A, nn_real* B, int M, int N)
 
     // Launch matrix-multiplication kernel
     kernel_transpose<<<dimGrid, dimBlock>>>(A, B, M, N); 
+    
+    return 0;
+}
+
+
+/* Scalar multiplication: A *= alpha */
+__global__
+void kernel_scalar_multiply(nn_real* A, nn_real alpha, int M, int N) 
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < M && col < N) 
+	    A[row + col*M] *= alpha;
+
+}
+
+int caller_scalar_multiply(nn_real* A, nn_real alpha, int M, int N) 
+{
+    // Thread block, grid dimensions
+    // M and N are dims of input matrix A
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    int dimGrid_x = (N + dimBlock.x - 1) / dimBlock.x;
+    int dimGrid_y = (M + dimBlock.y - 1) / dimBlock.y;
+    dim3 dimGrid(dimGrid_x, dimGrid_y);
+
+    // Launch matrix-multiplication kernel
+    kernel_scalar_multiply<<<dimGrid, dimBlock>>>(A, alpha, M, N); 
     
     return 0;
 }
