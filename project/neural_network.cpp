@@ -286,7 +286,7 @@ void parallel_backprop(d_NeuralNetwork& dnn, d_cache& dcache, d_grads& dgrad, nn
     int err;
 
     // compute diff with mat-mat subtraction
-    nn_real val = 1.0 / dcache.batch_size;
+    nn_real val = 1.0; // 1.0 / dcache.batch_size;
     err = caller_oop_matrix_addition(dcache.d_yc, 
                                      dcache.d_y, 
                                      dcache.d_diff, 
@@ -882,6 +882,25 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
 
   int print_flag = 0;
 
+  arma::Mat<nn_real> X_batch;
+  arma::Mat<nn_real> y_batch;
+
+  nn_real* X_minibatch; 
+  nn_real* y_minibatch;
+
+  int* sendcounts_X;
+  int* sendcounts_y;
+
+  int* displs_X;
+  int* displs_y;
+
+  arma::Mat<nn_real> h_dW1(nn.H[2], nn.H[1]);
+  arma::Mat<nn_real> h_dW0(nn.H[1], nn.H[0]);
+
+  arma::Col<nn_real> h_db1(nn.H[2]);
+  arma::Col<nn_real> h_db0(nn.H[1]);
+
+
   /* HINT: You can obtain a raw pointer to the memory used by Armadillo Matrices
      for storing elements in a column major way. Or you can allocate your own
      array memory space and store the elements in a row major way. Remember to
@@ -898,20 +917,6 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
   // copy nn to device
   // std::cout << "copying data to device" << std::endl;
   dnn.toGPU(nn);
-
-  // declarations on host for each process
-  arma::Mat<nn_real> X_batch;
-  arma::Mat<nn_real> y_batch;
-
-  nn_real* X_minibatch; 
-  nn_real* y_minibatch;
-
-  arma::Mat<nn_real> h_dW1(nn.H[2], nn.H[1]);
-  arma::Mat<nn_real> h_dW0(nn.H[1], nn.H[0]);
-
-  arma::Col<nn_real> h_db1(nn.H[2]);
-  arma::Col<nn_real> h_db0(nn.H[1]);
-
 
   /* iter is a variable used to manage debugging. It increments in the inner
      loop and therefore goes from 0 to epochs*num_batches */
@@ -946,26 +951,54 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
       X_minibatch = (nn_real*)malloc(sizeof(nn_real)*nn.H[0]*mb_size); 
       y_minibatch = (nn_real*)malloc(sizeof(nn_real)*nn.H[2]*mb_size); 
 
+      // prepare &sendcounts and &displs for scatterv operation
+      if (rank == ROOT) {
+        int sum_X = 0;
+        sendcounts_X = (int*)malloc(sizeof(int)*num_procs); 
+        displs_X = (int*)malloc(sizeof(int)*num_procs); 
+        for (int i = 0; i < num_procs; ++i) {
+          sendcounts_X[i] = nn.H[0]*get_mini_batch_size(b_size, num_procs, i);
+          displs_X[i] = sum_X;
+          sum_X += sendcounts_X[i];
+          // std::cout << sendcounts_X[i] << " " << displs_X[i] << std::endl;
+        }
+
+        int sum_y = 0;
+        sendcounts_y = (int*)malloc(sizeof(int)*num_procs); 
+        displs_y = (int*)malloc(sizeof(int)*num_procs); 
+        for (int i = 0; i < num_procs; ++i) {
+          sendcounts_y[i] = nn.H[2]*get_mini_batch_size(b_size, num_procs, i);
+          // displs_y[i] = i*nn.H[2]*mb_size;
+          displs_y[i] = sum_y;
+          sum_y += sendcounts_y[i];
+          // std::cout << sendcounts_y[i] << " " << displs_y[i] << std::endl;
+        }
+      }
+
       // scatter mini batches of images to each MPI node
       // std::cout << "mpi scatter X_batch into mini batches" << std::endl;
-      MPI_Scatter(X_batch.memptr(), 
-                  nn.H[0]*mb_size, 
-                  MPI_FP, 
-                  X_minibatch, 
-                  nn.H[0]*mb_size, 
-                  MPI_FP, 
-                  ROOT, 
-                  MPI_COMM_WORLD);
+      MPI_Scatterv(X_batch.memptr(), 
+                   // nn.H[0]*mb_size, 
+                   sendcounts_X,
+                   displs_X,
+                   MPI_FP, 
+                   X_minibatch, 
+                   nn.H[0]*mb_size, 
+                   MPI_FP, 
+                   ROOT, 
+                   MPI_COMM_WORLD);
 
       // std::cout << "mpi scatter y_batch into mini batches" << std::endl;
-      MPI_Scatter(y_batch.memptr(), 
-                  nn.H[2]*mb_size, 
-                  MPI_FP, 
-                  y_minibatch, 
-                  nn.H[2]*mb_size, 
-                  MPI_FP, 
-                  ROOT, 
-                  MPI_COMM_WORLD);
+      MPI_Scatterv(y_batch.memptr(), 
+                  //  nn.H[2]*mb_size, 
+                   sendcounts_y,
+                   displs_y,
+                   MPI_FP, 
+                   y_minibatch, 
+                   nn.H[2]*mb_size, 
+                   MPI_FP, 
+                   ROOT, 
+                   MPI_COMM_WORLD);
 
 
       /////////////////////////////////////////////////////////////////////////////
@@ -998,7 +1031,7 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
   
 
       /////////////////////////////////////////////////////////////////////////////
-      // 3. Reduce coefficient updates and broadcast  with `MPI_Allreduce()      //
+      // 3. Reduce coefficient updates and broadcast  with`MPI_Allreduce()       //
       /////////////////////////////////////////////////////////////////////////////
 
       // copy gradients back to host
@@ -1086,7 +1119,7 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
 
       // gradient descent
       // std::cout << "executing gradient descent" << std::endl;
-      parallel_normalize_gradients(dgrad, num_procs); 
+      parallel_normalize_gradients(dgrad, b_size); 
 
       parallel_regularization(dnn, dgrad, reg);
 
