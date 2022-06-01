@@ -58,7 +58,7 @@ struct d_grads {
 };
 
 
-/* Algorithm 3: GEMM in-place (16x4 block dim), C := alpha*A*B + beta*C */
+/* GEMM: Algorithm used for testing, C := alpha*A*B + beta*C */
 int myGEMM(nn_real* A, 
 		   nn_real* B, 
 		   nn_real* C, 
@@ -71,6 +71,21 @@ void kernelGEMM(nn_real* A,
 				nn_real* C, 
 				nn_real alpha, nn_real beta, 
 				int M, int N, int K); 
+
+
+/* Algorithm 3: GEMM in-place (16x4 block dim), C := alpha*A*B + beta*C */
+int caller_gemm_alg2(nn_real* A, 
+				     nn_real* B, 
+					 nn_real* C, 
+					 nn_real* alpha, nn_real* beta, 
+					 int M, int N, int K);
+
+__global__ 
+void kernel_gemm_alg2(nn_real* A, 
+				      nn_real* B, 
+					  nn_real* C, 
+					  nn_real alpha, nn_real beta, 
+					  int M, int N, int K); 
 
 
 /* Algorithm 2: GEMM in-place (shared memory blocks), C := alpha*A*B + beta*C */

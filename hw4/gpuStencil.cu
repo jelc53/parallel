@@ -293,11 +293,11 @@ void gpuStencilShared(float* next, const float* __restrict__ curr, int gx, int g
     if (i < gx) 
     {
         int niter = min(numY, gy-j);  // number of updates thread computes 
-	for (int it = 0; it < niter; it++) {
-	    if ((j+it) < gy) {
-	        shared[threadIdx.y*numY+it][threadIdx.x] = curr[gx*(j+it)+i];
-	    }
-	}
+        for (int it = 0; it < niter; it++) {
+            if ((j+it) < gy) {
+                shared[threadIdx.y*numY+it][threadIdx.x] = curr[gx*(j+it)+i];
+            }
+        }
     }
     __syncthreads(); 
 
