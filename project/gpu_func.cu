@@ -163,17 +163,181 @@ void d_grads::fromGPU(grads& bpgrads) {
 }
 
 
+/*
+  Algorithm 3: GEMM in-place (16x4 block dim), C := alpha*A*B + beta*C
+  
+  Mixture of shared memory and global memory access to compute 16x4 
+  sub block for each thread block.
+*/
+__global__
+void kernelGEMM(nn_real* __restrict__ A, 
+                nn_real* __restrict__ B, 
+                nn_real* __restrict__ C, 
+                nn_real alpha, nn_real beta, 
+                int M, int N, int K)
+{
+    // Each thread block updates one sub-matrix Csub
+    int block_start_row = blockDim.y*blockIdx.y;
+    int block_start_col = blockDim.x*blockIdx.x;
+
+    // Thread row and col within Csub
+    int row = threadIdx.y;
+    int col = threadIdx.x;
+
+    // Each thread computes one element of Csub 
+    // by accumulating results into Cvalue
+    nn_real ABvalue = 0;
+
+    // Shared memory used to store Asub and Bsub
+    __shared__ nn_real As[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ nn_real Bs[BLOCK_SIZE][BLOCK_SIZE];
+
+    if (row + block_start_row < M && col + block_start_col < N)
+    {
+        // Loop over all sub-matrices of A and B required to 
+        // compute Csub. Multiply together and accumulate results
+        for (int m = 0; m < ((K + BLOCK_SIZE - 1) / BLOCK_SIZE); ++m) 
+        {
+            // Identify start indices for Asub and Bsub MAYBE IDX??
+            int Asub_start_idx = block_start_row + m*BLOCK_SIZE*M; 
+            int Bsub_start_idx = m*BLOCK_SIZE + block_start_col*K;
+
+            // Load Asub and Bsub from device memory into shared
+            // memory. Each thread loads one element of each sub-matrix
+            As[row][col] = A[Asub_start_idx + col*M + row];
+            Bs[row][col] = B[Bsub_start_idx + col*K + row];
+
+            // Synchronize to make sure the sub-matrices are loaded
+            __syncthreads(); 
+
+            // Multiply Asub and Bsub together
+            for (int e = 0; e < BLOCK_SIZE; ++e) 
+            {
+                ABvalue += As[row][e] * Bs[e][col];
+            }
+            // Synchronize before loading two new sub matrices
+            __syncthreads();
+        }
+        // Write Csub to device memory
+        // Each thread writes one element
+        int idx = block_start_col*M + block_start_row;
+        C[idx + col*M + row] = alpha*ABvalue + beta*C[idx + col*M + row];
+    }
+    
+}
+
+int myGEMM(nn_real* __restrict__ A, 
+           nn_real* __restrict__ B, 
+           nn_real* __restrict__ C, 
+           nn_real* alpha, nn_real* beta, 
+           int M, int N, int K) 
+{
+    // Thread block, grid dimensions
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    int dimGrid_x = (N + dimBlock.x - 1) / dimBlock.x;
+    int dimGrid_y = (M + dimBlock.y - 1) / dimBlock.y;
+    dim3 dimGrid(dimGrid_x, dimGrid_y);
+
+    // Launch matrix-multiplication kernel
+    kernelGEMM<<<dimGrid, dimBlock>>>(A, B, C, *alpha, *beta, M, N, K); 
+
+    return 0;
+}
+
 
 /*
-  Routine to perform an in-place GEMM operation, i.e., C := alpha*A*B + beta*C
+  Algorithm 2: GEMM in-place (shared memory blocks), C := alpha*A*B + beta*C
   
+  Shared memory implementation that computes sub-blocks of each matrix for 
+  each thread block.
+*/
+__global__
+void kernel_gemm_alg2(nn_real* __restrict__ A, 
+                      nn_real* __restrict__ B, 
+                      nn_real* __restrict__ C, 
+                      nn_real alpha, nn_real beta, 
+                      int M, int N, int K)
+{
+    // Each thread block updates one sub-matrix Csub
+    int block_start_row = blockDim.y*blockIdx.y;
+    int block_start_col = blockDim.x*blockIdx.x;
+
+    // Thread row and col within Csub
+    int row = threadIdx.y;
+    int col = threadIdx.x;
+
+    // Each thread computes one element of Csub 
+    // by accumulating results into Cvalue
+    nn_real ABvalue = 0;
+
+    // Shared memory used to store Asub and Bsub
+    __shared__ nn_real As[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ nn_real Bs[BLOCK_SIZE][BLOCK_SIZE];
+
+    if (row + block_start_row < M && col + block_start_col < N)
+    {
+        // Loop over all sub-matrices of A and B required to 
+        // compute Csub. Multiply together and accumulate results
+        for (int m = 0; m < ((K + BLOCK_SIZE - 1) / BLOCK_SIZE); ++m) 
+        {
+            // Identify start indices for Asub and Bsub MAYBE IDX??
+            int Asub_start_idx = block_start_row + m*BLOCK_SIZE*M; 
+            int Bsub_start_idx = m*BLOCK_SIZE + block_start_col*K;
+
+            // Load Asub and Bsub from device memory into shared
+            // memory. Each thread loads one element of each sub-matrix
+            As[row][col] = A[Asub_start_idx + col*M + row];
+            Bs[row][col] = B[Bsub_start_idx + col*K + row];
+
+            // Synchronize to make sure the sub-matrices are loaded
+            __syncthreads(); 
+
+            // Multiply Asub and Bsub together
+            for (int e = 0; e < BLOCK_SIZE; ++e) 
+            {
+                ABvalue += As[row][e] * Bs[e][col];
+            }
+            // Synchronize before loading two new sub matrices
+            __syncthreads();
+        }
+        // Write Csub to device memory
+        // Each thread writes one element
+        int idx = block_start_col*M + block_start_row;
+        C[idx + col*M + row] = alpha*ABvalue + beta*C[idx + col*M + row];
+    }
+}
+
+int caller_gemm_alg2(nn_real* __restrict__ A, 
+                     nn_real* __restrict__ B, 
+                     nn_real* __restrict__ C, 
+                     nn_real* alpha, nn_real* beta, 
+                     int M, int N, int K) 
+{
+    // Thread block, grid dimensions
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    int dimGrid_x = (N + dimBlock.x - 1) / dimBlock.x;
+    int dimGrid_y = (M + dimBlock.y - 1) / dimBlock.y;
+    dim3 dimGrid(dimGrid_x, dimGrid_y);
+
+    // Launch matrix-multiplication kernel
+    kernel_gemm_alg2<<<dimGrid, dimBlock>>>(A, B, C, *alpha, *beta, M, N, K); 
+
+    return 0;
+}
+
+
+/* 
+  Algorithm 1: GEMM in-place (one thread per value), C := alpha*A*B + beta*C 
+
   Simple implementation that tackles sub-blocks of the matrix and computes 
   one value per thread. Does not make use of shaed memory.
 */
 __global__ 
-void kernelGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B, 
-		nn_real* __restrict__ C, nn_real alpha, nn_real beta, 
-	        int M, int N, int K) 
+void kernel_gemm_alg1(nn_real* __restrict__ A, 
+                      nn_real* __restrict__ B, 
+                      nn_real* __restrict__ C, 
+                      nn_real alpha, nn_real beta, 
+                      int M, int N, int K) 
 {
     // Each thread computes one element of C
     // by accumulating results into Cvalue
@@ -190,9 +354,11 @@ void kernelGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B,
     }
 }
 
-int myGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B,
-           nn_real* __restrict__ C, nn_real* alpha, nn_real* beta,
-           int M, int N, int K) 
+int caller_gemm_alg1(nn_real* __restrict__ A, 
+                     nn_real* __restrict__ B,
+                     nn_real* __restrict__ C, 
+                     nn_real* alpha, nn_real* beta,
+                     int M, int N, int K) 
 {
     // Thread block, grid dimensions
     dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
@@ -201,7 +367,7 @@ int myGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B,
     dim3 dimGrid(dimGrid_x, dimGrid_y);
 
     // Launch matrix-multiplication kernel
-    kernelGEMM<<<dimGrid, dimBlock>>>(A, B, C, *alpha, *beta, M, N, K); 
+    kernel_gemm_alg1<<<dimGrid, dimBlock>>>(A, B, C, *alpha, *beta, M, N, K); 
 
     return 0;
 }
