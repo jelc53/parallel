@@ -74,14 +74,14 @@ void kernelGEMM(nn_real* A,
 
 
 /* Algorithm 3: GEMM in-place (16x4 block dim), C := alpha*A*B + beta*C */
-int caller_gemm_alg2(nn_real* A, 
+int caller_gemm_alg3(nn_real* A, 
 				     nn_real* B, 
 					 nn_real* C, 
 					 nn_real* alpha, nn_real* beta, 
 					 int M, int N, int K);
 
 __global__ 
-void kernel_gemm_alg2(nn_real* A, 
+void kernel_gemm_alg3(nn_real* A, 
 				      nn_real* B, 
 					  nn_real* C, 
 					  nn_real alpha, nn_real beta, 

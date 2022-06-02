@@ -174,61 +174,59 @@ void kernelGEMM(nn_real* __restrict__ A,
                 nn_real alpha, nn_real beta, 
                 int M, int N, int K)
 {
-    // Each thread updates one cell in output matrix
-    int row = blockDim.y*blockIdx.y + threadIdx.y;
-    int col = blockDim.x*blockIdx.x + threadIdx.x;
-    
-    // Each thread block updates one sub-matrix Csub
-    int block_start_row = blockDim.y*blockIdx.y;
-    int block_start_col = blockDim.x*blockIdx.x;
+    // Index of thread within the matrix as a whole
+    int trow = (threadIdx.y*blockDim.x) + threadIdx.x;
+    int row = trow + blockIdx.y*blockDim.y*blockDim.x;
+    int col = blockIdx.x*numXPerThread;
 
-    // Each thread computes one element of Csub 
-    // by accumulating results into Cvalue
-    nn_real ABvalue = 0;
+    // Shared memory stores B sub-matrix 4x16
+    __shared__ nn_real Bs[BLOCKDIM_Y*BLOCKDIM_X];
 
-    // Shared memory used to store Asub and Bsub
-    __shared__ nn_real As[BLOCK_SIZE][BLOCK_SIZE];
-    __shared__ nn_real Bs[BLOCK_SIZE][BLOCK_SIZE];
+    // Local memory register stores A sub-matrix 1x4 
+    nn_real Dvals[16] = {};
+    nn_real a[4] = {};
 
     // Loop over all sub-matrices of A and B required to 
-    // compute Csub. Multiply together and accumulate results
-    for (int m = 0; m < ((K + BLOCK_SIZE - 1) / BLOCK_SIZE); ++m) 
+    // compute Csub 64x16. Multiply together and accumulate results
+    for (int m = 0; m < (K + BLOCKDIM_Y - 1) / BLOCKDIM_Y; ++m) 
     {
-        // Identify start indices for Asub and Bsub
-        int Asub_start_idx = block_start_row + m*BLOCK_SIZE*M; 
-        int Bsub_start_idx = m*BLOCK_SIZE + block_start_col*K;
-
-        // Load Asub and Bsub from device memory into shared
-        // memory. Each thread loads one element of each sub-matrix
-        if (m*BLOCK_SIZE + threadIdx.y < K && m*BLOCK_SIZE + threadIdx.x < K) {
-            if (row < M) {
-                As[threadIdx.y][threadIdx.x] = A[Asub_start_idx + threadIdx.x*M + threadIdx.y];
-            } 
-
-            if (col < N) {
-                Bs[threadIdx.y][threadIdx.x] = B[Bsub_start_idx + threadIdx.x*K + threadIdx.y];
-            } 
+        // Load Bsub from device memory into shared memory. 
+        // Each thread loads one element of each sub-matrix
+        int B_col = threadIdx.x; int B_row = threadIdx.y;
+        if (m*BLOCKDIM_Y + B_row < K && col + B_col < N) {
+            Bs[B_row + BLOCKDIM_Y * B_col] = B[(m*BLOCKDIM_Y + B_row) + (col + B_col)*K];
         }
-
+        
+        // Load A 1x4 sub matrix into local memory
+        // Each thread loads 1x4 array into register
+        if (row < M) {
+            for (int j = 0; j < BLOCKDIM_Y; ++j) {
+                if ((m*BLOCKDIM_Y + j) < K) {
+                    a[j] = A[row + (m*BLOCKDIM_Y + j)*M];
+                }
+            }
+        }
         // Synchronize to make sure the sub-matrices are loaded
         __syncthreads(); 
 
-        // Multiply Asub and Bsub together
-        if (row < M && col < N) {
-            int numIter = BLOCK_SIZE < K-(m*BLOCK_SIZE) ? BLOCK_SIZE : K-(m*BLOCK_SIZE);
-            for (int e = 0; e < numIter; ++e) {
-                ABvalue += As[threadIdx.y][e] * Bs[e][threadIdx.x];
+        // Multiply a[4] with Bsub to get 1x16 row of A*B 
+        for (int i = 0; i < numXPerThread; ++i) {
+            for (int j = 0; j < BLOCKDIM_Y; ++j) {
+                if (col + i < N && row < M && (m*BLOCKDIM_Y + j) < K) {
+                    Dvals[i] += a[j] * Bs[j + i*BLOCKDIM_Y];
+                }
             }
         }
-        
         // Synchronize before loading two new sub matrices
         __syncthreads();
     }
-    // Write Csub to device memory
-    // Each thread writes one element
-    if (row < M && col < N) {
-        C[col*M + row] = alpha*ABvalue + beta*C[col*M + row];
-    }
+
+    // Each thread updates 1x16 row to output matrix
+    for (int i = 0; i < numXPerThread; ++i) {
+        if (row < M && (col+i) < N) {
+            C[row + (col+i)*M] = alpha*Dvals[i] + beta*C[row + (col+i)*M];
+        }
+    }   
 }
 
 int myGEMM(nn_real* __restrict__ A, 
@@ -238,10 +236,10 @@ int myGEMM(nn_real* __restrict__ A,
            int M, int N, int K) 
 {
     // Thread block, grid dimensions
-    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
-    int dimGrid_x = (N + dimBlock.x - 1) / dimBlock.x;
-    int dimGrid_y = (M + dimBlock.y - 1) / dimBlock.y;
-    dim3 dimGrid(dimGrid_x, dimGrid_y);
+    dim3 dimBlock(BLOCKDIM_X, BLOCKDIM_Y);  // sepecifc for this implementation
+    int xblocks = (N + numXPerThread - 1) / numXPerThread;
+    int yblocks = (M + (BLOCKDIM_X*BLOCKDIM_Y) - 1) / (BLOCKDIM_X*BLOCKDIM_Y);
+    dim3 dimGrid(xblocks, yblocks);
 
     // Launch matrix-multiplication kernel
     kernelGEMM<<<dimGrid, dimBlock>>>(A, B, C, *alpha, *beta, M, N, K); 
