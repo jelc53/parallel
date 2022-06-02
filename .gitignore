@@ -34,7 +34,7 @@
 # Latex
 *.aux
 *.log
-*.out
+**/docs/*.out
 
 # Nvidia profiler
 *rep

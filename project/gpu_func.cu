@@ -262,58 +262,58 @@ void kernel_gemm_alg3(nn_real* __restrict__ A,
                       int M, int N, int K)
 {
     // Index of thread within the matrix as a whole
-    int row = blockDim.y*blockDim.x*blockIdx.y + threadIdx.x*blockDim.y + threadIdx.y;
+    int trow = (threadIdx.y*blockDim.x) + threadIdx.x;
+    int row = trow + blockIdx.y*blockDim.y*blockDim.x;
     int col = blockIdx.x*numXPerThread;
 
-    // Each thread computes one element of Csub 
-    // by accumulating results into Cvalue
-    nn_real ABvals[16] = {0};
+    // Shared memory stores B sub-matrix 4x16
+    __shared__ nn_real Bs[BLOCKDIM_Y*BLOCKDIM_X];
 
-    // Local memory used to store A sub-matrix 1x4 
-    nn_real a[4];
+    // Local memory register stores A sub-matrix 1x4 
+    nn_real Dvals[16] = {};
+    nn_real a[4] = {};
 
-    // Shared memory used to store B sub-matrix 4x16
-    __shared__ nn_real Bs[BLOCKDIM_Y][BLOCKDIM_X];
-
-    if (row < M && col < N)
+    // Loop over all sub-matrices of A and B required to 
+    // compute Csub 64x16. Multiply together and accumulate results
+    for (int m = 0; m < (K + BLOCKDIM_Y - 1) / BLOCKDIM_Y; ++m) 
     {
-        int numUpdates = blockDim.x < N-col ? blockDim.x : N-col;
-
-        // Loop over all sub-matrices of A and B required to 
-        // compute Csub 64x16. Multiply together and accumulate results
-        for (int m = 0; m < ((K + blockDim.y - 1) / blockDim.y); ++m) 
-        {
-            // Identify start indices for Asub and Bsub
-            int a_start_idx = m*blockDim.y*M + row;
-            int Bsub_start_idx = col*K + m*blockDim.y;
-
-            // Load Bsub from device memory into shared memory. 
-            // Each thread loads one element of each sub-matrix
-            Bs[threadIdx.y][threadIdx.x] = B[Bsub_start_idx + threadIdx.x*K + threadIdx.y];
-
-            // Each thread reads in 1x4 sub-matrix of A into local array
-            for (int j = 0; j < blockDim.y; ++j) 
-                a[j] = A[a_start_idx + j*M];
-
-            // Synchronize to make sure the sub-matrices are loaded
-            __syncthreads(); 
-
-            // Multiply a[4] with Bsub to get 1x16 row of A*B 
-            // int numIter = BLOCKDIM_Y < K-(m*BLOCKDIM_Y) ? BLOCKDIM_Y : K-(m*BLOCKDIM_Y);
-            for (int i = 0; i < numUpdates; ++i) {
-                for (int j = 0; j < blockDim.y; ++j) {
-                    ABvals[i] += a[j] * Bs[j][i];
+        // Load Bsub from device memory into shared memory. 
+        // Each thread loads one element of each sub-matrix
+        int B_col = threadIdx.x; int B_row = threadIdx.y;
+        if (m*BLOCKDIM_Y + B_row < K && col + B_col < N) {
+            Bs[B_row + BLOCKDIM_Y * B_col] = B[(m*BLOCKDIM_Y + B_row) + (col + B_col)*K];
+        }
+        
+        // Load A 1x4 sub matrix into local memory
+        // Each thread loads 1x4 array into register
+        if (row < M) {
+            for (int j = 0; j < BLOCKDIM_Y; ++j) {
+                if ((m*BLOCKDIM_Y + j) < K) {
+                    a[j] = A[row + (m*BLOCKDIM_Y + j)*M];
                 }
             }
-            // Synchronize before loading two new sub matrices
-            __syncthreads();
         }
-        // Each thread updates 1x16 row to output matrix
-        for (int i = 0; i < numUpdates; ++i) {
-            // updates 64x16 block
-            C[(col+i)*M + row] = alpha*ABvals[i] + beta*C[(col+i)*M + row];
-        }   
-    }  
+        // Synchronize to make sure the sub-matrices are loaded
+        __syncthreads(); 
+
+        // Multiply a[4] with Bsub to get 1x16 row of A*B 
+        for (int i = 0; i < numXPerThread; ++i) {
+            for (int j = 0; j < BLOCKDIM_Y; ++j) {
+                if (col + i < N && row < M && (m*BLOCKDIM_Y + j) < K) {
+                    Dvals[i] += a[j] * Bs[j + i*BLOCKDIM_Y];
+                }
+            }
+        }
+        // Synchronize before loading two new sub matrices
+        __syncthreads();
+    }
+
+    // Each thread updates 1x16 row to output matrix
+    for (int i = 0; i < numXPerThread; ++i) {
+        if (row < M && (col+i) < N) {
+            C[row + (col+i)*M] = alpha*Dvals[i] + beta*C[row + (col+i)*M];
+        }
+    }   
 }
 
 int caller_gemm_alg3(nn_real* __restrict__ A, 
