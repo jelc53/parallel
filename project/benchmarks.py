@@ -7,22 +7,26 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.ticker import LinearLocator
 
-def plot_bandwidth_by_algorithm(data, out_dir, ord):
+def plot_bandwidth_by_algorithm(data, out_dir, dtypes):
 
-    algs = data['algorithm'].unique()
-    filtered_data = data[data["order"] == ord].copy()
-    x = ['256x256', '512x512', '1024x1024', '2048x2048', '4096x4096']
+    algs = data['alg'].unique()
+    x = ['40', '400', '4000', '40000']
     # x = np.array([256**2, 512**2, 1024**2, 2048**2, 4096**2])
 
-    for alg in algs:
-        y = filtered_data[filtered_data['algorithm'] == alg]['bandwidth_gbps']
-        plt.plot(x, y, label=alg)
+    fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(12,6), sharey=False)
 
-    plt.xlabel('Grid size in MegaPoints')
-    plt.ylabel('Bandwidth in Gb/sec')
+    for i in range(len(dtypes)):
+        filtered_data = data[data['type'] == dtypes[i]].copy()
+        axs[i].set_yscale('log')
+        axs[i].set_title(dtypes[i])
+        axs[i].set(xlabel='Problem size (N = number of columns)', ylabel='Time to execute (sec)')
+        for alg in algs:
+            y = filtered_data[filtered_data['alg'] == alg]['time_sec']
+            axs[i].plot(x, y, label=alg)
+
     plt.legend()
 
-    out_name = "bandwidth_by_alg_ord" + str(ord) + ".png"
+    out_name = "speed_alg_vs_problem_size.png"
     plt.savefig(
         os.path.join(out_dir, out_name), 
         format="png",
@@ -31,42 +35,16 @@ def plot_bandwidth_by_algorithm(data, out_dir, ord):
     plt.show()
     plt.close()
 
-
-def plot_bandwidth_by_order(data, out_dir, alg):
-
-    ords = data["order"].unique()
-    filtered_data = data[data["algorithm"] == alg]
-    x = ['256x256', '512x512', '1024x1024', '2048x2048', '4096x4096']
-    # x = np.array([256**2, 512**2, 1024**2, 2048**2, 4096**2])
-
-    for ord in ords:
-        y = filtered_data[filtered_data['order'] == ord]['bandwidth_gbps']
-        plt.plot(x, y, label=ord)
-
-    plt.xlabel('Grid size in MegaPoints')
-    plt.ylabel('Bandwidth in Gb/sec')
-    plt.legend()
-
-    out_name = "bandwidth_by_order_" + alg + ".png"
-    plt.savefig(
-        os.path.join(out_dir, out_name), 
-        format="png",
-        dpi=100
-    )
-    plt.show()
-    plt.close()
 
 def main():
 
     filename = sys.argv[1]
     out_dir = os.path.join("docs")
     data = pd.read_csv(filename)
-    # print(data.head())
+    print(data.head())
 
     plt.style.use('ggplot')
-    plot_bandwidth_by_algorithm(data, out_dir, ord=8)
-    plot_bandwidth_by_order(data, out_dir, alg='block')
-    plot_bandwidth_by_order(data, out_dir, alg='shared')
+    plot_bandwidth_by_algorithm(data, out_dir, dtypes=['fp32', 'fp64'])
 
 
 if __name__ == '__main__':
