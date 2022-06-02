@@ -21,20 +21,33 @@ matrix-matrix operations across four GPUs. Our neural network will be used
 to identify digits from hand-written images from the MNIST dataset.
 
 \paragraph{Part 1: Accelerated Matrix Multiplication} Idea: parallelize generalized
-inplace matrix mulitplication $C = \alpha*A*B + \beta*C$ across cores of one GPU. We 
+inplace matrix mulitplication (GEMM) $C = \alpha*A*B + \beta*C$ across cores of one GPU. We 
 will be able to use this to excute multiple steps in the neural network's feed forward 
 and back propagation operations.
 
-\begin{figure}[!htbp]
-    \centering
-    \includegraphics[scale=0.7]{gemm_naive.png}
-    \caption{Naive matrix multiplication on GPU. Source: NVIDIA Programming Guide.}
-\end{figure}
+\begin{itemize}
+    \item \textbf{Algorithm \#1:} Our first implementation is correct but naive and 
+    inefficient. We ask each thread to compute a single value of the output matrix 
+    C. This requires each thread to read an entire row from matrix A and column from 
+    matrix B, resulting in a lot of repeated global memory accesses for the same 
+    information as we work our way through the multiplication. 
+
+    \item \textbf{Algorithm \#2:} ...
+
+    \item \textbf{Algorithm \#3: } ...
+
+\end{itemize}
 
 \begin{figure}[!htbp]
     \centering
     \includegraphics[scale=0.6]{speed_alg_vs_problem_size.png}
     \caption{Speed test of GEMM algorithms for float and double precision}
+\end{figure}
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[scale=0.7]{speed_alg_vs_dimensions.png}
+    \caption{Speed test of GEMM algorithms for different M x N dimensions}
 \end{figure}
 
 Our first implementation is correct but naive and inefficient. We ask each thread to 
