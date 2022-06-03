@@ -233,7 +233,7 @@ void parallel_feedforward(d_NeuralNetwork& dnn, d_cache& dcache)
     err = caller_gemm_repmat(dnn.d_W0, 
                              dcache.d_X, 
                              dnn.d_b0, 
-                             dcache.d_z0, 
+                             dcache.d_a0, 
                              1, 1, 
                              dcache.H1,
                              dcache.batch_size, 
@@ -244,8 +244,7 @@ void parallel_feedforward(d_NeuralNetwork& dnn, d_cache& dcache)
     }
 
     // compute a1 with sigmoid
-    err = caller_sigmoid(dcache.d_z0, 
-                         dcache.d_a0, 
+    err = caller_sigmoid(dcache.d_a0, 
                          dcache.H1, 
                          dcache.batch_size);
     
@@ -257,7 +256,7 @@ void parallel_feedforward(d_NeuralNetwork& dnn, d_cache& dcache)
     err = caller_gemm_repmat(dnn.d_W1, 
                              dcache.d_a0, 
                              dnn.d_b1, 
-                             dcache.d_z1, 
+                             dcache.d_a1, 
                              1, 1, 
                              dcache.H2, 
                              dcache.batch_size, 
@@ -268,8 +267,7 @@ void parallel_feedforward(d_NeuralNetwork& dnn, d_cache& dcache)
     }
 
     // compute a2 with softmax
-    err = caller_softmax(dcache.d_z1, 
-                         dcache.d_a1, 
+    err = caller_softmax(dcache.d_a1, 
                          dcache.H2, 
                          dcache.batch_size);
 
@@ -277,7 +275,7 @@ void parallel_feedforward(d_NeuralNetwork& dnn, d_cache& dcache)
         std::cout << "Error in kernel. Error code: " << err << std::endl;
     }
     // update yc from a2
-    dcache.d_yc = dcache.d_a1; 
+    // dcache.d_yc = dcache.d_a1; 
 
 }
 
@@ -287,7 +285,7 @@ void parallel_backprop(d_NeuralNetwork& dnn, d_cache& dcache, d_grads& dgrad, nn
 
     // compute diff with mat-mat subtraction
     nn_real val = 1.0; // 1.0 / dcache.batch_size;
-    err = caller_oop_matrix_addition(dcache.d_yc, 
+    err = caller_oop_matrix_addition(dcache.d_a1, 
                                      dcache.d_y, 
                                      dcache.d_diff, 
                                      val, -val, 
@@ -937,7 +935,7 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
      update the Armadillo matrices in NeuralNetwork &nn of rank 0 before
      returning from the function. */
 
-  /* TODO Allocate memory before the iterations */
+  /* Allocate memory before the iterations */
   // std::cout << "starting parallel pipeline" << std::endl;
   int dims[4] = {nn.H[0], nn.H[1], nn.H[2], batch_size};
   d_NeuralNetwork dnn(nn);
@@ -1149,11 +1147,6 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
 
       // gradient descent
       // std::cout << "executing gradient descent" << std::endl;
-      // parallel_normalize_gradients(dgrad, b_size); 
-
-      // parallel_regularization(dnn, dgrad, reg);
-
-      // parallel_descent(dnn, dgrad, learning_rate);
       parallel_norm_reg_sgd(dnn, dgrad, b_size, reg, learning_rate);
 
       // +-*=+-*=+-*=+-*=+-*=+-*=+-*=+-*=+*-=+-*=+*-=+-*=+-*=+-*=+-*=+-*= //
@@ -1166,7 +1159,7 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
       }
   
       if (debug && rank == 0 && print_flag) {
-        // TODO Copy data back to the CPU
+        // Copy data back to the CPU
 	      dnn.fromGPU(nn);
 
         /* The following debug routine assumes that you have already updated the
@@ -1178,11 +1171,11 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
     }
   }
 
-  // TODO Copy data back to the CPU
+  // Copy data back to the CPU
   // std::cout << "copy data back to host" << std::endl;
   dnn.fromGPU(nn);
   
-  // TODO Free memory
+  // Free memory
   // Note, should now happen when dnn, dcache destructors called
 
 }

@@ -23,11 +23,11 @@ d_cache::d_cache(int* dims)
 	: H0(dims[0]), H1(dims[1]), H2(dims[2]), batch_size(dims[3])
 {  
   // memory management for cache  
-  cudaMalloc(&d_z0, sizeof(nn_real) * H1*batch_size);
-  check_launch("malloc d_z0");
+//   cudaMalloc(&d_z0, sizeof(nn_real) * H1*batch_size);
+//   check_launch("malloc d_z0");
   
-  cudaMalloc(&d_z1, sizeof(nn_real) * H2*batch_size);
-  check_launch("malloc d_z1");
+//   cudaMalloc(&d_z1, sizeof(nn_real) * H2*batch_size);
+//   check_launch("malloc d_z1");
   
   cudaMalloc(&d_a0, sizeof(nn_real) * H1*batch_size);
   check_launch("malloc d_a0");
@@ -35,8 +35,8 @@ d_cache::d_cache(int* dims)
   cudaMalloc(&d_a1, sizeof(nn_real) * H2*batch_size);
   check_launch("malloc d_a1");
   
-  cudaMalloc(&d_yc, sizeof(nn_real) * H2*batch_size);
-  check_launch("malloc d_yc");
+//   cudaMalloc(&d_yc, sizeof(nn_real) * H2*batch_size);
+//   check_launch("malloc d_yc");
 
   // memory management for data (X, y)
   cudaMalloc(&d_X, sizeof(nn_real) * H0*batch_size);
@@ -61,11 +61,11 @@ d_cache::d_cache(int* dims)
 
 d_cache::~d_cache() {
 
-  cudaFree(d_z0); 
-  cudaFree(d_z1);
+//   cudaFree(d_z0); 
+//   cudaFree(d_z1);
   cudaFree(d_a0); 
   cudaFree(d_a1); 
-  cudaFree(d_yc);
+//   cudaFree(d_yc);
   cudaFree(d_diff); 
   cudaFree(d_da1);
   cudaFree(d_dz1);
@@ -76,11 +76,11 @@ d_cache::~d_cache() {
 void d_cache::toGPU(cache& bpcache) 
 {
   int batch_size_adj = bpcache.z[0].n_cols;
-  cudaMemcpy(d_z0, bpcache.z[0].memptr(), sizeof(nn_real) * H1*batch_size_adj, cudaMemcpyHostToDevice); 
-  check_launch("memcpy d_a0");
+//   cudaMemcpy(d_z0, bpcache.z[0].memptr(), sizeof(nn_real) * H1*batch_size_adj, cudaMemcpyHostToDevice); 
+//   check_launch("memcpy d_z0");
 
-  cudaMemcpy(d_z1, bpcache.z[1].memptr(), sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyHostToDevice); 
-  check_launch("memcpy d_a1");
+//   cudaMemcpy(d_z1, bpcache.z[1].memptr(), sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyHostToDevice); 
+//   check_launch("memcpy d_z1");
 
   cudaMemcpy(d_a0, bpcache.a[0].memptr(), sizeof(nn_real) * H1*batch_size_adj, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_a0");
@@ -88,19 +88,19 @@ void d_cache::toGPU(cache& bpcache)
   cudaMemcpy(d_a1, bpcache.a[1].memptr(), sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyHostToDevice); 
   check_launch("memcpy d_a1");
 
-  cudaMemcpy(d_yc, bpcache.yc.memptr(), sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyHostToDevice); 
-  check_launch("memcpy d_yc");
+//   cudaMemcpy(d_yc, bpcache.yc.memptr(), sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyHostToDevice); 
+//   check_launch("memcpy d_yc");
 
 }
 
 void d_cache::fromGPU(cache& bpcache) 
 {  
   int batch_size_adj = bpcache.z[0].n_cols;
-  cudaMemcpy(bpcache.z[0].memptr(), d_z0, sizeof(nn_real) * H1*batch_size_adj, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpcache.z[1].memptr(), d_z1, sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyDeviceToHost);
+//   cudaMemcpy(bpcache.z[0].memptr(), d_z0, sizeof(nn_real) * H1*batch_size_adj, cudaMemcpyDeviceToHost);
+//   cudaMemcpy(bpcache.z[1].memptr(), d_z1, sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyDeviceToHost);
   cudaMemcpy(bpcache.a[0].memptr(), d_a0, sizeof(nn_real) * H1*batch_size_adj, cudaMemcpyDeviceToHost);
   cudaMemcpy(bpcache.a[1].memptr(), d_a1, sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyDeviceToHost);
-  cudaMemcpy(bpcache.yc.memptr(), d_yc, sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyDeviceToHost);
+//   cudaMemcpy(bpcache.yc.memptr(), d_yc, sizeof(nn_real) * H2*batch_size_adj, cudaMemcpyDeviceToHost);
 }
 
 
@@ -1142,6 +1142,44 @@ int caller_pointwise_three_matrix(nn_real* A,
 }
 
 
+/* 3x matrix pointwise multiply  C = (alpha) * A % B % (1-B) */
+__global__
+void kernel_pointwise_dz1(nn_real* A, 
+                          nn_real* B, 
+                          nn_real* C,
+                          nn_real alpha, 
+                          int M, int N) 
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < M && col < N) {
+	    C[row + col*M] = alpha * A[row + col*M] * 
+            B[row + col*M] * (1-B[row + col*M]);
+    }
+}
+
+int caller_pointwise_dz1(nn_real* A, 
+                         nn_real* B, 
+                         nn_real* C,
+                         nn_real alpha, 
+                         int M, int N) 
+{
+    // Thread block, grid dimensions
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    int dimGrid_x = (N + dimBlock.x - 1) / dimBlock.x;
+    int dimGrid_y = (M + dimBlock.y - 1) / dimBlock.y;
+    dim3 dimGrid(dimGrid_x, dimGrid_y);
+
+    // Launch matrix-multiplication kernel
+    kernel_pointwise_dz1<<<dimGrid, dimBlock>>>(A, B, C,
+                                                alpha, 
+                                                M, N); 
+
+    return 0;
+}
+
+
 /* Transpose matrix: B = A.T */
 __global__ 
 void kernel_transpose(nn_real* A, nn_real* B, int M, int N) 
@@ -1232,16 +1270,16 @@ int caller_sum_matrix_rows(nn_real* A,
 
 /* Sigmoid function implemented for matrix */
 __global__ 
-void kernel_sigmoid(nn_real* A, nn_real* B, int M, int N) 
+void kernel_sigmoid(nn_real* A, int M, int N) 
 {
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (row < M && col < N) 
-	    B[row + col*M] = 1 / (1 + exp(-A[row + col*M]));
+	    A[row + col*M] = 1 / (1 + exp(-A[row + col*M]));
 }
 
-int caller_sigmoid(nn_real* A, nn_real* B, int M, int N) 
+int caller_sigmoid(nn_real* A, int M, int N) 
 {
     // Thread block, grid dimensions
     dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
@@ -1250,7 +1288,33 @@ int caller_sigmoid(nn_real* A, nn_real* B, int M, int N)
     dim3 dimGrid(dimGrid_x, dimGrid_y);
 
     // Launch matrix-multiplication kernel
-    kernel_sigmoid<<<dimGrid, dimBlock>>>(A, B, M, N); 
+    kernel_sigmoid<<<dimGrid, dimBlock>>>(A, M, N); 
+
+    return 0;
+}
+
+
+/* Sigmoid function implemented for matrix */
+__global__ 
+void kernel_oop_sigmoid(nn_real* A, nn_real* B, int M, int N) 
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < M && col < N) 
+	    B[row + col*M] = 1 / (1 + exp(-A[row + col*M]));
+}
+
+int caller_oop_sigmoid(nn_real* A, nn_real* B, int M, int N) 
+{
+    // Thread block, grid dimensions
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    int dimGrid_x = (N + dimBlock.x - 1) / dimBlock.x;
+    int dimGrid_y = (M + dimBlock.y - 1) / dimBlock.y;
+    dim3 dimGrid(dimGrid_x, dimGrid_y);
+
+    // Launch matrix-multiplication kernel
+    kernel_oop_sigmoid<<<dimGrid, dimBlock>>>(A, B, M, N); 
 
     return 0;
 }
@@ -1258,7 +1322,37 @@ int caller_sigmoid(nn_real* A, nn_real* B, int M, int N)
 
 /* Softmax function implemented for matrix */
 __global__ 
-void kernel_softmax(nn_real* A, nn_real* B, int M, int N) 
+void kernel_softmax(nn_real* A, int M, int N) 
+{
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (col < N) { 
+	nn_real divisor = 0;
+        for (int row = 0; row < M; row++) {
+	    divisor += exp(A[row + col*M]);
+	}    
+	for (int row = 0; row < M; row++) {
+	    A[row + col*M] = exp(A[row + col*M]) / divisor;
+	}
+    }
+}
+
+int caller_softmax(nn_real* A, int M, int N) 
+{
+    // Thread block, grid dimensions
+    dim3 dimBlock(BLOCK_SIZE);
+    dim3 dimGrid((N + dimBlock.x - 1) / dimBlock.x);
+
+    // Launch matrix-multiplication kernel
+    kernel_softmax<<<dimGrid, dimBlock>>>(A, M, N); 
+    
+    return 0;
+}
+
+
+/* Softmax function implemented for matrix */
+__global__ 
+void kernel_oop_softmax(nn_real* A, nn_real* B, int M, int N) 
 {
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -1273,14 +1367,14 @@ void kernel_softmax(nn_real* A, nn_real* B, int M, int N)
     }
 }
 
-int caller_softmax(nn_real* A, nn_real* B, int M, int N) 
+int caller_oop_softmax(nn_real* A, nn_real* B, int M, int N) 
 {
     // Thread block, grid dimensions
     dim3 dimBlock(BLOCK_SIZE);
     dim3 dimGrid((N + dimBlock.x - 1) / dimBlock.x);
 
     // Launch matrix-multiplication kernel
-    kernel_softmax<<<dimGrid, dimBlock>>>(A, B, M, N); 
+    kernel_oop_softmax<<<dimGrid, dimBlock>>>(A, B, M, N); 
     
     return 0;
 }

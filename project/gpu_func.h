@@ -17,9 +17,9 @@ struct d_cache {
     // cache
     nn_real* d_X;
     nn_real* d_y;
-    nn_real* d_yc;
-    nn_real* d_z0;
-	nn_real* d_z1;
+    // nn_real* d_yc;
+    // nn_real* d_z0;
+	// nn_real* d_z1;
     nn_real* d_a0;
 	nn_real* d_a1;
 
@@ -296,6 +296,21 @@ void kernel_pointwise_three_matrix(nn_real* A,
 								   int M, int N);
 
 
+/* 3x matrix pointwise multiply  C = (alpha) * A % B % (1-B) */
+int caller_pointwise_dz1(nn_real* A, 
+                         nn_real* B, 
+                         nn_real* C,
+                         nn_real alpha, 
+                         int M, int N); 
+
+__global__
+void kernel_pointwise_dz1(nn_real* A, 
+                          nn_real* B, 
+                          nn_real* C,
+                          nn_real alpha, 
+                          int M, int N); 
+						  
+
 /* Transpose matrix: B = A.T */
 int caller_transpose(nn_real* A, nn_real* B, int M, int N);
 
@@ -318,17 +333,31 @@ void kernel_sum_matrix_rows(nn_real* A, nn_real* b, int M, int N);
 
 
 /*  Sigmoid function implemented for matrix */
-int caller_sigmoid(nn_real* A, nn_real* B, int M, int N) ;
+int caller_sigmoid(nn_real* A, int M, int N) ;
 
 __global__ 
-void kernel_sigmoid(nn_real* A, nn_real* B, int M, int N);
+void kernel_sigmoid(nn_real* A, int M, int N);
+
+
+/*  Sigmoid function implemented for matrix */
+int caller_oop_sigmoid(nn_real* A, nn_real* B, int M, int N) ;
+
+__global__ 
+void kernel_oop_sigmoid(nn_real* A, nn_real* B, int M, int N);
 
 
 /* Softmax function implemented for matrix */
-int caller_softmax(nn_real* A, nn_real* B, int M, int N);
+int caller_softmax(nn_real* A, int M, int N);
 
 __global__ 
-void kernel_softmax(nn_real* A, nn_real* B, int M, int N);
+void kernel_softmax(nn_real* A, int M, int N);
+
+
+/* Softmax function implemented for matrix */
+int caller_oop_softmax(nn_real* A, nn_real* B, int M, int N);
+
+__global__ 
+void kernel_oop_softmax(nn_real* A, nn_real* B, int M, int N);
 
 
 #endif

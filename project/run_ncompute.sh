@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --time=00:60:00
+#SBATCH --time=01:00:00
 #SBATCH --partition=CME
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=4
@@ -29,4 +29,5 @@ cd $SLURM_SUBMIT_DIR
 
 make
 
-ncu -o ncompute ./main -g 3
+ncu -o ncompute --target-process all --set roofline ./main -g 3
+# ncu -f -o ncompute --target-process all mpirun -n 4 ./main -n 100 -b 10000 -l 0.001 -e 1

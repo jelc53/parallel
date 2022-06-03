@@ -1,8 +1,8 @@
-The master node of this job is icmet01
+The master node of this job is icmet02
 This job runs on the following nodes:
-icmet01
-Starting at Sun May 29 06:39:27 UTC 2022
-Running on hosts: icmet01
+icmet02
+Starting at Fri Jun  3 03:14:46 UTC 2022
+Running on hosts: icmet02
 Running on 1 nodes.
 Running on 4 processors.
 Current working directory is /home/jelc/cme213-para/project
@@ -20,5 +20,5 @@ Size of x_train, N =  60000
 Size of label_train = 60000
 
 Start Parallel Training
-Time for Parallel Training: 0.545974 seconds
+Time for Parallel Training: 0.583293 seconds
 Precision on validation set for parallel training = 0.298833

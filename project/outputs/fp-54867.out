@@ -1,0 +1,83 @@
+The master node of this job is icmet02
+This job runs on the following nodes:
+icmet02
+Starting at Fri Jun  3 03:09:02 UTC 2022
+Running on hosts: icmet02
+Running on 1 nodes.
+Running on 4 processors.
+Current working directory is /home/jelc/cme213-para/project
+
+Output from code
+----------------
+
+* Mode 1 *
+mpirun -np 4 /home/jelc/cme213-para/project/main -g 1
+Number of MPI processes = 4
+Number of CUDA devices = 4
+num_neuron=100, reg=0.0001, learning_rate=0.0005, num_epochs=40, batch_size=800
+Loading training data
+Training data information:
+Size of x_train, N =  60000
+Size of label_train = 60000
+
+Start Parallel Training
+Time for Parallel Training: 6.21835 seconds
+Precision on validation set for parallel training = 0.829167
+
+Grading mode on. Now checking for correctness...
+
+Max norm of diff b/w seq and par: W[0]: 1.67148e-07, b[0]: 6.48996e-07
+l2  norm of diff b/w seq and par: W[0]: 1.90219e-07, b[0]: 5.9543e-07
+Max norm of diff b/w seq and par: W[1]: 1.23694e-07, b[1]: 2.35195e-07
+l2  norm of diff b/w seq and par: W[1]: 1.4785e-07, b[1]: 3.65353e-07
+
+* Mode 2 *
+mpirun -np 4 /home/jelc/cme213-para/project/main -g 2
+Number of MPI processes = 4
+Number of CUDA devices = 4
+num_neuron=100, reg=0.0001, learning_rate=0.001, num_epochs=10, batch_size=800
+Loading training data
+Training data information:
+Size of x_train, N =  60000
+Size of label_train = 60000
+
+Start Parallel Training
+Time for Parallel Training: 1.9885 seconds
+Precision on validation set for parallel training = 0.756
+
+Grading mode on. Now checking for correctness...
+
+Max norm of diff b/w seq and par: W[0]: 9.19209e-08, b[0]: 6.51537e-07
+l2  norm of diff b/w seq and par: W[0]: 1.22162e-07, b[0]: 5.3744e-07
+Max norm of diff b/w seq and par: W[1]: 1.07825e-07, b[1]: 4.89293e-07
+l2  norm of diff b/w seq and par: W[1]: 1.22396e-07, b[1]: 4.15027e-07
+
+* Mode 3 *
+mpirun -np 4 /home/jelc/cme213-para/project/main -g 3
+Number of MPI processes = 4
+Number of CUDA devices = 4
+num_neuron=100, reg=0.0001, learning_rate=0.002, num_epochs=1, batch_size=800
+Loading training data
+Training data information:
+Size of x_train, N =  60000
+Size of label_train = 60000
+
+Start Parallel Training
+Time for Parallel Training: 0.664474 seconds
+Precision on validation set for parallel training = 0.463667
+
+Grading mode on. Now checking for correctness...
+
+Max norm of diff b/w seq and par: W[0]: 3.34595e-08, b[0]: 4.85088e-07
+l2  norm of diff b/w seq and par: W[0]: 5.38475e-08, b[0]: 3.37135e-07
+Max norm of diff b/w seq and par: W[1]: 6.66367e-08, b[1]: 4.576e-07
+l2  norm of diff b/w seq and par: W[1]: 8.4744e-08, b[1]: 3.71014e-07
+
+*** Summary ***
+
+2400           1.5021e-07     1.12417e-07    6.03892e-07    2.8173e-07     1.75229e-07    1.41101e-07    6.0056e-07     3.99024e-07    
+600            8.6205e-08     1.03895e-07    5.80105e-07    6.72516e-07    1.14945e-07    1.23361e-07    4.713e-07      4.72073e-07    
+60             3.0044e-08     6.3696e-08     3.87455e-07    3.94104e-07    4.95518e-08    8.11486e-08    3.05312e-07    3.31506e-07    
+
+*** Tests are complete ***
+

@@ -18,23 +18,33 @@
 
 Goal of the final project is to implement a neural network with parallel 
 matrix-matrix operations across four GPUs. Our neural network will be used
-to identify digits from hand-written images from the MNIST dataset.
+to identify images of hand-written digits from the MNIST dataset.
 
-\paragraph{Part 1: Accelerated Matrix Multiplication} Idea: parallelize generalized
-inplace matrix mulitplication (GEMM) $C = \alpha*A*B + \beta*C$ across cores of one GPU. We 
+\paragraph{Section 1: Accelerated Matrix Multiplication} Idea: parallelize our generalized
+in-place matrix mulitplication (GEMM) $C = \alpha*A*B + \beta*C$ across cores of one GPU. We 
 will be able to use this to excute multiple steps in the neural network's feed forward 
 and back propagation operations.
 
 \begin{itemize}
-    \item \textbf{Algorithm \#1:} Our first implementation is correct but naive and 
-    inefficient. We ask each thread to compute a single value of the output matrix 
-    C. This requires each thread to read an entire row from matrix A and column from 
-    matrix B, resulting in a lot of repeated global memory accesses for the same 
-    information as we work our way through the multiplication. 
+    \item \textbf{Algorithm \#1:} Our first (naive) implementation is correct but 
+    very inefficient. We ask each thread to compute a single value of the output matrix 
+    C. This requires each thread to fetch from global memory an entire row of matrix A 
+    and column from matrix B, resulting in a lot of repeated global memory requests 
+    for the same information. Note, Algorithm 1 was used for part 1 of the project.
 
-    \item \textbf{Algorithm \#2:} ...
+    \item \textbf{Algorithm \#2:} Our second implementation makes use of shared 
+    memory, which affords us increased bandwidth. In particular, algorithm 2 
+    loads a 32x32 block from matrix A and matrix B into shared memory before
+    performing a partial update on the corresponding 32x32 block of output
+    matrix C. Each thread still only performs an update for a single cell 
+    in the output matrix.  
 
-    \item \textbf{Algorithm \#3: } ...
+    \item \textbf{Algorithm \#3: } Our third implementation uses a specific 
+    thread block of size 4x16 to compute a partial update of a 64x16 block of 
+    output matrix C. Each thread in this case updates one 1x16 row of this
+    64x16 block, which reduces latency and increases overall arithmetic intensity 
+    compared to algorithms 1 and 2. This implementation makes use of shared memory 
+    as well as local (register) memory.  
 
 \end{itemize}
 
@@ -44,47 +54,35 @@ and back propagation operations.
     \caption{Speed test of GEMM algorithms for float and double precision}
 \end{figure}
 
+In Figure 1, we can see that our algorithms progressively improve towards 
+(but do not match) the reference cublas solution for FP32 numbers. However,
+for double precision FP64 numbers, algorithms 2, 3 and the reference all 
+perform similarly, with algorithm 3 actually surpassing the reference. 
+This is likely because the cublas solution is optimized for FP32 given 
+most use cases (e.g. neural network training) do not require double 
+precision.
+
 \begin{figure}[!htbp]
     \centering
     \includegraphics[scale=0.7]{speed_alg_vs_dimensions.png}
     \caption{Speed test of GEMM algorithms for different M x N dimensions}
 \end{figure}
 
-Our first implementation is correct but naive and inefficient. We ask each thread to 
-compute a single value of the output matrix C. This requires each thread to read an 
-entire row from matrix A and column from matrix B, resulting in a lot of repeated 
-global memory accesses for the same information as we work our way through the 
-multiplication. See code sample below.
+Figure 2 shows a heat map with speed tests for different GEMM matrix dimension
+combinations (assuming FP32). Since algorithm 1 $<$ algorithm 2 $<$ algorithm 3 
+$<$ reference for all settings, I have consistenly implemented algorithm 3 
+throughout my neural network kernels. It is intersting to note that this 
+relative differences shift quite a bit, but never enough to justify 
+a change of algorithm for specific settings. Further analysis could take 
+into account other input parameter options such as size of thread block,
+number of processes, etc.
 
-\begin{cpp}
-/* 
-Routine to perform an in-place GEMM, i.e., C := alpha*A*B + beta*C
-*/
-__global__ 
-void kernelGEMM(nn_real* __restrict__ A, nn_real* __restrict__ B, 
-        nn_real* __restrict__ C, nn_real alpha, nn_real beta, 
-            int M, int N, int K) 
-{
-    // Each thread computes one element of C
-    // by accumulating results into Cvalue
-    nn_real Cvalue = 0;
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (row < M && col < N) 
-    {
-        for (int e = 0; e < K; ++e) 
-        Cvalue += A[row + M*e] * B[e +  K*col];	
-        
-    C[row + col*M] = alpha*Cvalue + beta*C[row + col*M];
-    }
-}
-\end{cpp}
+\textbf{GEMM correctness.} See grading output below from GEMM Algorithm 3. Our
+results match \texttt{cublas\_gemm} values to within precision error for 
+FP32 numbers (rel difference of $10^{-7}$). This is consistent across test 
+cases. 
 
 \begin{verbatim}
-Output from code
-----------------
-
 *** Grading mode 4 ***
 
 main -g 4
@@ -95,73 +93,97 @@ Entering GEMM Benchmarking mode! Stand by.
 
 Starting GEMM 1: M = 3200; N = 4000; K = 3136
 GEMM matched with reference successfully! Rel diff = 1.00042e-07
-Time for reference GEMM implementation: 0.0710125 seconds
-Time for my GEMM implementation: 3.04307 seconds
+Time for reference GEMM implementation: 0.0690576 seconds
+Time for my GEMM implementation: 0.21447 seconds
 Completed GEMM 1
 
 Starting GEMM 2: M = 3200; N = 400; K = 4000
 GEMM matched with reference successfully! Rel diff = 4.57243e-07
-Time for reference GEMM implementation: 0.00806695 seconds
-Time for my GEMM implementation: 0.389439 seconds
+Time for reference GEMM implementation: 0.00814952 seconds
+Time for my GEMM implementation: 0.0293013 seconds
 Completed GEMM 2
 
 Starting GEMM 3: M = 3200; N = 40; K = 4000
 GEMM matched with reference successfully! Rel diff = 7.29707e-07
-Time for reference GEMM implementation: 0.00140079 seconds
-Time for my GEMM implementation: 0.0438419 seconds
+Time for reference GEMM implementation: 0.00140982 seconds
+Time for my GEMM implementation: 0.0101932 seconds
 Completed GEMM 3
 
 *** Tests are complete ***
 \end{verbatim}
 
-In subsequent implementations we will try to improve the performance of this 
-generalized matrix multiplication algorithm. For example, one speed-up would be
-to make use of shared memory. To do this, we could have each thread block compute
-a sub-matrix (of size matching thread block dimensions) in the output matrix, with
-just the required blocks from A and B read into shared memory. This allows us to 
-make use of increased access speed of shared memory and take advantage of a more
-coalesced global memory access pattern.
-
-
-\paragraph{Part 2: Parallelize Neural Network (Single GPU)} Idea: training a neural
+\pagebreak
+\paragraph{Section 2: Parallelize Neural Network (Single GPU)} Idea: training a neural
 network involves repeatedly updating weights and biases at each layer through forward
 and backwards propagation. Internally, these operations are mostly various adaptations
 of genralized matrix multiplication! We want to take existing sequential code and 
-parallelize each using cuda code from part 1.
+parallelize each using our optimized GEMM algorithm from Section 1.
+
+Based on profiling analysis from my part 1 of the project ('naive' version in table below), 
+I implemented a series of updates to improve the performance of my code.
+\begin{table}[h]
+    \begin{tabular}{llllll}
+    \textbf{version} & \textbf{procs} & \textbf{mode\_1} & \textbf{mode\_2} & \textbf{mode\_3} &                                      \\
+    naive            & 4              & 8.352            & 2.405            & 0.888            & project part 1 implementation        \\
+    update\_1        & 4              & 6.420            & 2.026            & 0.694            & updated kernels to use algorithm 3   \\
+    update\_2        & 4              & 6.218            & 1.989            & 0.664            & incorporated tranpose into kernels   \\
+    update\_3        & 4              & 6.194            & 1.947            & 0.618            & combined gradient descent step       \\
+    update\_4        & 4              & 6.129            & 1.947            & 0.622            & switched to in-place operations      \\
+    reference        & 4              & 2.580            & 0.980            & 0.590            &                                                             
+    \end{tabular}
+\end{table}
 
 \begin{itemize}
-    \item \textbf{Feed forward.} Returns matrix \texttt{yc} from passing input images
-    start to finish through the neural network layers. Here we parallelize the operations
-    that compute activations of all neurons as well as the final softmax function. The 
-    activations in aprticular are expensive to compute and essentially boil down to being 
-    matrix-matrix multiplications. 
+    \item \textbf{Update 1: GEMM Algorithms.} My generalized matrix multplication 
+    from part 1 was very inefficient: each thread computes just one output value 
+    and does not make use of shared memory. Algorithm 3 from Section 1 is an order
+    of magnitude faster due to its use of shared memory and sophisticated memory 
+    access pattern (more coelesced). My first update was therefore to adapt all 
+    variations of GEMM used in our neural network training to use the Algorithm 
+    3 implementation.  
 
-    \item \textbf{Back propagation.} Returns gradients \texttt{dW} and \texttt{db} from 
-    passing the difference between \texttt{yc} and our target \texttt{y} back through the 
-    neural network. Again we parallelize the core matrix operations involved, including
-    transpose and matrix multiplication.
+    \item \textbf{Update 2: Tranpose Kernels.} My intial version of used  
+    additional memory and a dedicated kernel (\texttt{kernel\_transpose}) to 
+    perform the three matrix tranpose steps required in back propagation. 
+    While this was nicely modular and therefore useful for unit testing, 
+    it was inefficient. This second update eliminates the need to store 
+    \texttt{d\_XT}, \texttt{d\_a0T}, and \texttt{d\_W1T} in my cache (removing 
+    associated cuda malloc statements) and no longer requires three separate 
+    instantiations of the transpose kernel. I did this by simply writing 
+    additional GEMM kernel variants that handle transposing input matrices.
 
-    \item \textbf{Gradient descent.} Returns updated neural network parameters (weights 
-    \texttt{W} and biases \texttt{b}). This is a simple application of our graidents from 
-    bakc propagation multiplied with a chosen learning rate. While I have parallelized this
-    step, it is not clearly beneficial due to the MPI host-device back and forth required 
-    to sum partial gradients across processes before gradient descent. 
-
+    \item \textbf{Update 3: Graident Descent.} My normalization, regularization 
+    and gradient descent steps all previously were implemented in separate kernels.
+    It turns out that these steps can be readily combined and re-expressed together 
+    as the following matrix addition expression (e.g. for W[0]): 
+    
+    $$W[0] \mathrel{{-}{=}} l*(\frac{1}{n} dW[0] + r W[0])$$.  
+    
+    \item \textbf{Update 4: In-place Operations.} I allocate memory on the device for 
+    a bunch of temporary variables to assist with intermediate calculations during 
+    feed forward and back propagation steps. Looking at the profiler output, these 
+    malloc steps are quite expensive. I implemented updates to eliminate \texttt{z0}, 
+    \texttt{z1}, \texttt{yc} and \texttt{1ma0} from my cache variables by overwriting 
+    existing cache variables where possible (e.g. sigmoid function can update a0 in-place). 
 \end{itemize}
 
+Each update above resulted in a net improvement for the \texttt{mode 1} speed test at 
+N=4 processes. The increases were diminishing in magnitude, with \texttt{Update 1}
+having the largest impact (25\%) and \texttt{Update 4} being almost within margin 
+of error given natural variability of icme gpu runtimes. The best result was 6.129 
+seconds for \texttt{mode 1} after \texttt{Update 4}.  
+
+\textbf{Neural Network correctness.} For all of the parameter variations tested, the 
+weights and biases produced by the parallel neural network training algorithm match 
+within machine accuracy the CPU sequential code (i.e. max and l2 norms differ
+by $10^{-7}$). Furthermore, when tested using double precision floating point 
+numbers, our norm errors reduce to $O(10^{-16})$ as we would expect if the 
+differences were purely machine accuracy rather than logic inconsistencies.   
+
 \begin{verbatim}
-Starting at Sat May 28 01:16:51 UTC 2022
-Running on hosts: icmet04
-Running on 1 nodes.
-Running on 4 processors.
-Current working directory is /home/jelc/cme213-para/project
-
-Output from code
-----------------
-
 * Mode 1 *
-mpirun -np 1 /home/jelc/cme213-para/project/main -g 1
-Number of MPI processes = 1
+mpirun -np 3 /home/jelc/cme213-para/project/main -g 1
+Number of MPI processes = 4
 Number of CUDA devices = 4
 num_neuron=100, reg=0.0001, learning_rate=0.0005, num_epochs=40, batch_size=800
 Loading training data
@@ -170,19 +192,19 @@ Size of x_train, N =  60000
 Size of label_train = 60000
 
 Start Parallel Training
-Time for Parallel Training: 7.85949 seconds
+Time for Parallel Training: 6.12856 seconds
 Precision on validation set for parallel training = 0.829167
 
 Grading mode on. Now checking for correctness...
 
-Max norm of diff b/w seq and par: W[0]: 1.54722e-07, b[0]: 5.94913e-07
-l2  norm of diff b/w seq and par: W[0]: 1.90251e-07, b[0]: 5.54432e-07
-Max norm of diff b/w seq and par: W[1]: 1.5259e-07, b[1]: 1.91096e-07
-l2  norm of diff b/w seq and par: W[1]: 1.55346e-07, b[1]: 2.35015e-07
+Max norm of diff b/w seq and par: W[0]: 1.70544e-07, b[0]: 1.02758e-06
+l2  norm of diff b/w seq and par: W[0]: 1.94657e-07, b[0]: 6.68161e-07
+Max norm of diff b/w seq and par: W[1]: 1.16507e-07, b[1]: 1.61697e-07
+l2  norm of diff b/w seq and par: W[1]: 1.43914e-07, b[1]: 2.84616e-07
 
 * Mode 2 *
-mpirun -np 1 /home/jelc/cme213-para/project/main -g 2
-Number of MPI processes = 1
+mpirun -np 3 /home/jelc/cme213-para/project/main -g 2
+Number of MPI processes = 4
 Number of CUDA devices = 4
 num_neuron=100, reg=0.0001, learning_rate=0.001, num_epochs=10, batch_size=800
 Loading training data
@@ -191,19 +213,19 @@ Size of x_train, N =  60000
 Size of label_train = 60000
 
 Start Parallel Training
-Time for Parallel Training: 2.24912 seconds
+Time for Parallel Training: 1.94655 seconds
 Precision on validation set for parallel training = 0.756
 
 Grading mode on. Now checking for correctness...
 
-Max norm of diff b/w seq and par: W[0]: 8.94932e-08, b[0]: 4.61505e-07
-l2  norm of diff b/w seq and par: W[0]: 1.23037e-07, b[0]: 4.71446e-07
-Max norm of diff b/w seq and par: W[1]: 1.46356e-07, b[1]: 4.07745e-07
-l2  norm of diff b/w seq and par: W[1]: 1.54429e-07, b[1]: 3.5195e-07
+Max norm of diff b/w seq and par: W[0]: 8.80379e-08, b[0]: 5.97242e-07
+l2  norm of diff b/w seq and par: W[0]: 1.20557e-07, b[0]: 5.32801e-07
+Max norm of diff b/w seq and par: W[1]: 1.03612e-07, b[1]: 2.44647e-07
+l2  norm of diff b/w seq and par: W[1]: 1.2233e-07, b[1]: 2.04047e-07
 
 * Mode 3 *
-mpirun -np 1 /home/jelc/cme213-para/project/main -g 3
-Number of MPI processes = 1
+mpirun -np 3 /home/jelc/cme213-para/project/main -g 3
+Number of MPI processes = 4
 Number of CUDA devices = 4
 num_neuron=100, reg=0.0001, learning_rate=0.002, num_epochs=1, batch_size=800
 Loading training data
@@ -212,22 +234,15 @@ Size of x_train, N =  60000
 Size of label_train = 60000
 
 Start Parallel Training
-Time for Parallel Training: 0.56508 seconds
+Time for Parallel Training: 0.621657 seconds
 Precision on validation set for parallel training = 0.463667
 
 Grading mode on. Now checking for correctness...
 
-Max norm of diff b/w seq and par: W[0]: 3.62044e-08, b[0]: 4.51159e-07
-l2  norm of diff b/w seq and par: W[0]: 5.70983e-08, b[0]: 3.23318e-07
-Max norm of diff b/w seq and par: W[1]: 6.22334e-08, b[1]: 2.59939e-07
-l2  norm of diff b/w seq and par: W[1]: 7.5405e-08, b[1]: 1.77756e-07
-
-*** Summary ***
-
-2400           1.40465e-07    1.45118e-07    6.03892e-07    1.9369e-07     1.75842e-07    1.51356e-07    5.24816e-07    2.36566e-07    
-600            8.31383e-08    1.35914e-07    6.12333e-07    3.84295e-07    1.13652e-07    1.48703e-07    4.68868e-07    3.25847e-07    
-60             3.33698e-08    6.31382e-08    4.08258e-07    2.66437e-07    5.36129e-08    7.22897e-08    3.02703e-07    1.9781e-07     
-
+Max norm of diff b/w seq and par: W[0]: 3.38911e-08, b[0]: 6.03991e-07
+l2  norm of diff b/w seq and par: W[0]: 5.41403e-08, b[0]: 3.4692e-07
+Max norm of diff b/w seq and par: W[1]: 5.75366e-08, b[1]: 4.68431e-07
+l2  norm of diff b/w seq and par: W[1]: 7.41761e-08, b[1]: 3.59052e-07     
 \end{verbatim}
 
 \textbf{Remarks on debgugging.} This step required significant debugging effort given 
@@ -235,12 +250,14 @@ the inherent complexity of indexing many different variations of parallel matrix
 operations. My approach here was to add \texttt{\#if} and \texttt{\#endif} statements 
 after each major step of the sequential algorithm and try to reproduce that step using 
 my parallel code. To test whether the two implementations matched, I re-used existing 
-\texttt{checkErrors} and \texttt{checkNNErrors} from the provided starter code test suite.
+\texttt{checkErrors} and \texttt{checkNNErrors} functions from the provided starter 
+code test suite.
 
 
-\paragraph{Part 3: Parallelize Training Batches (Multiple GPUs)} Idea: while each epoch 
+\pagebreak
+\paragraph{Section 3: Parallelize Training Batches (Multiple GPUs)} Idea: while each epoch 
 needs to be executed sequentially, we can perform forwards and backwards propagation on 
-batches within each epoch independently (and therefore in parallel). Our code from part 
+batches within each epoch independently (and therefore in parallel). Our code from Section 
 2 should already make good use of hardware resources on a single GPU, however, in this 
 project we have access to multiple GPUs! We use MPI to help coordinate sending different
 training batches ('mini batches') to different GPUs as well as receiving back and 
@@ -254,6 +271,12 @@ Steps implemented:
     respective minibatch of images and produces a set of partial gradients for 
     weights and biases.
 
+    \underline{Bonus}: While the above approach works for N=1,2 and 4 processes (i.e. when
+    number of processes divides batch size), we needed a more advanced code to handle N=3.
+    To do this, we implemented a more customizable variation of \texttt{MPI\_Scatter} 
+    called \texttt{MPI\_Scatterv}. This allows for the user to adjust the number of 
+    bytes sent to each process rather than requiring all to receive the same.
+
     \item \textbf{MPI\_AllReduce.} We use \texttt{MPI\_AllReduce} to sum our partial 
     gradients that have been computed across our 4 processes together and broadcast 
     combined output back to all processes. To do this, we first needed to copy the 
@@ -261,22 +284,16 @@ Steps implemented:
     be computed on all processes (a bit wasteful) to update our neural network 
     parameters (weights and biases).
 
-    Note: We needed to be careful to avoid accidentally scaling our gradients and 
-    regularization term by the number of processes.
+    Note: we needed to be careful to avoid accidentally scaling our gradients and 
+    regularization term by the number of processes. To address this, we remove these 
+    steps from the back propagation internals and instead apply after \texttt{MPI\_AllReduce}. 
 \end{itemize}
 
+Run times before and after MPI for our naive implementation.
 \begin{verbatim}
-
-Output from code
-----------------
-* Mode 1 *
-Time for Parallel Training: 6.56678 seconds
-
-* Mode 2 *
-Time for Parallel Training: 2.03137 seconds
-
-* Mode 3 *
-Time for Parallel Training: 0.69288 seconds
+Mode 1: (before) 7.85949 vs (after) 6.56678 seconds
+Mode 2: (before) 2.24912 vs (after) 2.03137 seconds
+Mode 3: (before) 0.56508 vs (after) 0.69288 seconds
 \end{verbatim}
 
 The above runtime statistics show an improvement for mode 1 (epochs = 40) but actually
@@ -285,103 +302,73 @@ MPI setup overhead regardless but do not compute enough iterations to benefit fr
 distributing across 4 GPUs (processes).
 
 
-\paragraph{Part 4: Profiling Parallel Code} Idea: use NVIDIA's Nsight Systems and Nsight
-Compute sofwtware tool to interrogate performance of code and assess how to improve.
+\pagebreak
+\paragraph{Section 4: Profiling Optimized Code} Idea: use NVIDIA's Nsight Systems and Nsight
+Compute software tool to interrogate performance of code and assess how to improve. This 
+section from the preliminary report informed the updates described in Section 2 of this 
+document.
 
-\textbf{Nsight Systems:} Used this software to look across the whole program timeline 
-and identify the largest relative sources of performance loss.
+\textbf{Nsight Systems:} Used to look across the whole program timeline and identify the 
+largest relative sources of performance loss.
 
-First takeaway from looking at Nsight Systems timeline was how expensive our 
-\texttt{cudaMalloc} and \texttt{MPI\_Bcast} setup operations were compared to the 
-neural network training itself. 
+First takeaway (Figure 3) from looking at the updated Nsight Systems timeline was that the 
+\texttt{cudaMalloc} is not impacted as much as I would have hoped from removing 
+temporary cache variables. This mirrors the speed test analysis which did not show 
+meaningful improvements from \texttt{Update 4} and is likely because we do not touch 
+the larger memory allocation statements (e.g. input image data). 
 
 \begin{figure}[!htbp]
     \centering
-    \includegraphics[scale=0.35]{nsight_systems_overview.png}
+    \includegraphics[scale=0.3]{nsight_systems_overview2.png}
     \caption{Nsight Systems timeline of entire program for single epoch}
 \end{figure}
 
-Second takeaway was relative expense of \texttt{MPI\_Scatter} and \texttt{cudaMemcpy}
+Second takeaway (Figure 4) was relative expense of \texttt{MPI\_Scatter} and \texttt{cudaMemcpy}
 operations compared with our feed forward, back propagation and gradient descent kernels.
 To me this highlights the importance to reducing the number of movements to and from the 
 device, especially within the batch loops as is currently the case for X and y as well 
-as gradients pre and post \texttt{MPI\_AllReduce}. It might even be worth eliminating 
-the GPU parallel code for graident descent to avoid this!
+as gradients pre and post \texttt{MPI\_AllReduce}. A future implementation might consider 
+splitting work differently across my 4 GPUs (processes) to reduce \texttt{cudaMemcpy} and 
+\texttt{MPI} statements. Currently I divide each batch into 'mini batches', however, 
+instead I could think about dividing my model parameters (weights and biases) across 
+the different processes. 
 
 \begin{figure}[!htbp]
     \centering
-    \includegraphics[scale=0.3]{nsight_systems_batch.png}
+    \includegraphics[scale=0.3]{nsight_systems_batch2.png}
     \caption{Nsight Systems timeline for training of one image batch}
 \end{figure}
 
-Third takeaway was that our generalized matrix multiplication kernel was 3-4x the time 
-cost of any other matrix operation kernel in our program. While this looks to be small 
-here compared to data transfers, this becomes relevant when we want to train the neural 
-network over 40 epochs.
+Third takeaway (Figure 5) was that our training pipeline takes noticably (approx. 50\%) 
+less time for each epoch! This looks to be because (a) we execute far fewer kernels (16 
+vs 25 for each training cycle), and (b) our GEMM related kernels are all more performant. 
+This is great news and also agrees with our runtime statistics where updates 1 and 2 made 
+the largest difference.
 
 \begin{figure}[!htbp]
     \centering
-    \includegraphics[scale=0.3]{nsight_systems_kernels.png}
+    \includegraphics[scale=0.3]{nsight_systems_kernels2.png}
     \caption{Nsight Systems relative time cost of all matrix kernels}
 \end{figure}
 
 
-\textbf{Nsight Compute:} Used this software to take a deeper look into the performance of 
+\textbf{Nsight Compute:} Used to take a deeper look into the performance of 
 individual kernels. In particular, our generalized matrix multiplication kernel.
 
-Fourth takeaway was that we are still very much latency bound. Both our Compute and Memory
-utilizations were far too low: 5.93\% and 22.56\% repectively. Goal here to is to increase 
-utilization to ultimately increase arithmetic intensity. 
+Main takeaway is  ...  we are approaching memory bound... better arithmetic intensity 
+for double precision ...
 
 \begin{figure}[!htbp]
     \centering
-    \includegraphics[scale=0.5]{nsight_compute_sol.png}
-    \caption{Nsight Compute speed of light results for GEMM kernel}
+    \includegraphics[scale=0.5]{nsight_compute_roofline.png}
+    \caption{Nsight Compute speed of light roofline plot for GEMM kernel}
 \end{figure}
 
-Fifth takeaway was we can immediately improve the launch configuration for this kernel.
-We currently use a grid sizae of 25 which is far less than the GPU's 72 multiprocessors.
-To improve we will want to increase the grid size to fully utilize available hardware.
-
-\begin{figure}[!htbp]
-    \centering
-    \includegraphics[scale=0.5]{nsight_compute_lao.png}
-    \caption{Nsight Compute launch statistics and occupancy for GEMM kernel}
-\end{figure}
-
-
-Ideas to improve performance:
-\begin{itemize}
-    \item \textbf{Matrix multiplication.} Currently my generalized matrix multplication 
-    is implemented such that each thread computes just one output value. This is super 
-    inefficient since each thread needs to collect a bunch of data from global memory 
-    (entire row of one matrix and column of the next) to do this one computation, 
-    whereas if we asked the thread to compute a small block of values, it could 
-    re-use much of its global memory request across these. 
-
-    Additionally, we could store sections of the input matrices in shared memory to 
-    make use of the increased bandwidth vs global memory associated with being 
-    closer to the processing units.
-
-    \item \textbf{Kernel usage.} I run a separate kernel for every individual compute 
-    step. This means our kernels can be qutie generic (e.g. matrix multiplication, 
-    matrix addition) which is great for debugging, but also means we spin up a lot 
-    of separate kernels for each training cycle. It might be more effiicent to write 
-    one kernel that handles multiple steps at once to reduce communication back and 
-    forth (e.g. a feed forward kernel vs matrix multiplication kernel). 
-    
-    \item \textbf{Device memory allocation.} I allocate memory on the device for a 
-    bunch of temporary variables to assist with intermediate calculations during 
-    feed forward and back propagation steps. Looking at the profiler output, these 
-    malloc steps are quite expensive and I imagine there are a number of optimization
-    opportunities here to cut down on teh number of additional temporary variables
-    by overwriting existing cache variables rather than write to new. 
-
-    \item \textbf{Batching logic.} A more ambitious optimization might be to change 
-    how I split work across my 4 GPUs (processes). Currently I divide each batch 
-    into 'mini batches', however, instead I could think about dividing my model 
-    parameters (weights and biases) across the different processes. 
-
-\end{itemize}
+Finally, Nsight Compute's launch statistics suggests that I launch too small a grid for the 
+available hardware specs. Given fixed thread block dimensions and \texttt{numXPerThread}, 
+our grid size is fixed to match the input matrices and so in some sense we are constrained. That 
+said, it would be interesting to experiment with smaller thread block or \texttt{numXPerThread} 
+settings that allow for a larger grid and potentially use more of the available hardware 
+resource at the expense of memory access being less coalesced. 
 
 \end{document}

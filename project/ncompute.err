@@ -22,8 +22,3 @@ main.cpp(@335): Loading from file /home/jelc/cme213-para/project/results//seq_nn
 main.cpp(@339): Loading from file /home/jelc/cme213-para/project/results//seq_nn-b0-3.mat
 main.cpp(@335): Loading from file /home/jelc/cme213-para/project/results//seq_nn-W1-3.mat
 main.cpp(@339): Loading from file /home/jelc/cme213-para/project/results//seq_nn-b1-3.mat
-[icmet01:10568] PMIX ERROR: NO-PERMISSIONS in file dstore_base.c at line 237
-[icmet01:10568] PMIX ERROR: NO-PERMISSIONS in file dstore_base.c at line 246
-terminate called after throwing an instance of 'N5boost10filesystem16filesystem_errorE'
-  what():  boost::filesystem::remove: Directory not empty: "/home/jelc/tmp/NVIDIA-treetracker-uPvq6W"
-/var/spool/slurmd/job52277/slurm_script: line 32: 10542 Aborted                 (core dumped) ncu -o ncompute ./main -g 3
