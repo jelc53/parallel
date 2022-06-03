@@ -1,0 +1,7 @@
+version,num_procs,mode_1,mode_2,mode_3,description
+naive,4,8.352,2.405,0.888,naive implementation from part 1
+update_1,4,6.42,2.026,0.694,updated gemm’s to use algorithm 3
+update_2,4,6.194,1.947,0.618,incorporated tranpose step into gemm kernels
+update_3,4,,,,combined gradient descent with normalization and reg kernels
+best,4,,,,changed to in-place operations to save malloc
+reference,4,2.58,0.98,0.59,

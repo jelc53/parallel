@@ -25,9 +25,6 @@ struct d_cache {
 
     // tmp vars
     nn_real* d_diff;
-	nn_real* d_a0T;
-	nn_real* d_W1T;
-	nn_real* d_XT;
     nn_real* d_da1;
     nn_real* d_dz1;
 	nn_real* d_1ma0;
@@ -135,6 +132,40 @@ void kernel_oop_gemm(nn_real* A,
 					 int M, int N, int K);
 
 
+/* GEMM out-of-place, transpose first: D := alpha*A.T*B + beta*C */
+int caller_oop_gemm_t1(nn_real* A, 
+					   nn_real* B, 
+					   nn_real* C, 
+					   nn_real* D,
+					   nn_real alpha, nn_real beta, 
+					   int M, int N, int K);
+
+__global__ 
+void kernel_oop_gemm_t1(nn_real* A, 
+						nn_real* B, 
+						nn_real* C, 
+						nn_real* D,
+						nn_real alpha, nn_real beta, 
+						int M, int N, int K);
+
+
+/* GEMM out-of-place, transpose second: D := alpha*A*B.T + beta*C */
+int caller_oop_gemm_t2(nn_real* A, 
+					   nn_real* B, 
+					   nn_real* C, 
+					   nn_real* D,
+					   nn_real alpha, nn_real beta, 
+					   int M, int N, int K);
+
+__global__ 
+void kernel_oop_gemm_t2(nn_real* A, 
+						nn_real* B, 
+						nn_real* C, 
+						nn_real* D,
+						nn_real alpha, nn_real beta, 
+						int M, int N, int K);
+
+
 /* Simple matrix multiplication: C := (alpha)*A*B */
 int caller_matrix_multiply(nn_real* __restrict__ A, 
                            nn_real* __restrict__ B,
@@ -150,35 +181,50 @@ void kernel_matrix_multiply(nn_real* __restrict__ A,
                             int M, int N, int K);
 
 
+/* Matrix multiplication, transpose first: C := (alpha)*A.T*B */
+int caller_matrix_multiply_t1(nn_real* __restrict__ A, 
+							  nn_real* __restrict__ B,
+							  nn_real* __restrict__ C, 
+							  nn_real alpha, 
+							  int M, int N, int K);
+
+__global__ 
+void kernel_matrix_multiply_t1(nn_real* __restrict__ A, 
+							   nn_real* __restrict__ B, 
+							   nn_real* __restrict__ C, 
+							   nn_real alpha, 
+							   int M, int N, int K);
 
 
 /* GEMM RepMat: D := alpha*A*B + beta*[ccc] */
-int caller_linear_transform(nn_real* A, 
-							nn_real* B, 
-							nn_real* c, 
-							nn_real* D, 
-							nn_real alpha, nn_real beta, 
-							int M, int N, int K);
+int caller_gemm_repmat(nn_real* A, 
+					   nn_real* B, 
+					   nn_real* c, 
+					   nn_real* D, 
+					   nn_real alpha, nn_real beta, 
+					   int M, int N, int K);
 
 __global__ 
-void kernel_linear_transform(nn_real* A, 
-					         nn_real* B, 
-							 nn_real* c, 
-							 nn_real* D, 
-							 nn_real alpha, nn_real beta, 
-							 int M, int N, int K);
+void kernel_gemm_repmat(nn_real* A, 
+						nn_real* B, 
+						nn_real* c, 
+						nn_real* D, 
+						nn_real alpha, nn_real beta, 
+						int M, int N, int K);
 
 
-/* Matrix addition inplace: A += alpha*B */
+/* Matrix addition inplace: A = alpha*A + beta*B */
 int caller_matrix_addition(nn_real* A, 
 						   nn_real* B, 
 						   nn_real alpha, 
+						   nn_real beta,
 						   int M, int N); 
 
 __global__ 
 void kernel_matrix_addition(nn_real* A, 
 							nn_real* B, 
 							nn_real alpha, 
+							nn_real beta,
 							int M, int N);
 
 
