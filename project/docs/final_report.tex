@@ -353,14 +353,22 @@ the largest difference.
 
 
 \textbf{Nsight Compute:} Used to take a deeper look into the performance of 
-individual kernels. In particular, our generalized matrix multiplication kernel.
+individual kernels for FP32 precision. In particular, our generalized matrix multiplication kernel. 
 
-Main takeaway is  ...  we are approaching memory bound... better arithmetic intensity 
-for double precision ...
+Main takeaway is that we have increased both arithmetic intensity (23.24 FLOP/byte) and performance
+($5*10^{9}$ FLOP/sec) significantly compared to our part 1 GEMM implementation! That said, there is still 
+plenty of performance uplift available as demonstrated in the roofline chart by the gap between 
+our achieved performance (green dot) and the peak FP32 performancen boundary (top horizontal 
+blue line). This position implies we are still very much latency bound. 
+
+It is intersting to note however that our position in the roofline plot has shifted meaningfully to 
+the right such that we are no longer near the memory bandwidth bound line. This suggests latency 
+improvements will contribute directly to improved performance since not constrained immediately
+by memory bandwidth. 
 
 \begin{figure}[!htbp]
     \centering
-    \includegraphics[scale=0.5]{nsight_compute_roofline.png}
+    \includegraphics[scale=0.5]{nsight_compute_roofline2.png}
     \caption{Nsight Compute speed of light roofline plot for GEMM kernel}
 \end{figure}
 

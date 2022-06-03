@@ -37,6 +37,7 @@
 
 # Nvidia profiler
 *rep
+*.qdrep
 
 # Jupyter
 .ipynb_checkpoints/
