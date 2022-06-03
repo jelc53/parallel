@@ -29,5 +29,5 @@ cd $SLURM_SUBMIT_DIR
 
 make
 
-ncu -o ncompute --target-process all --set roofline ./main -g 3
+ncu -o ncompute --set full ./main -g 3
 # ncu -f -o ncompute --target-process all mpirun -n 4 ./main -n 100 -b 10000 -l 0.001 -e 1
