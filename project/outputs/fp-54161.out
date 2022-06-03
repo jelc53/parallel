@@ -1,0 +1,40 @@
+The master node of this job is icmet03
+This job runs on the following nodes:
+icmet03
+Starting at Thu Jun  2 05:21:20 UTC 2022
+Running on hosts: icmet03
+Running on 1 nodes.
+Running on 4 processors.
+Current working directory is /home/jelc/cme213-para/project
+
+Output from code
+----------------
+
+*** Grading mode 4 ***
+
+main -g 4
+Number of MPI processes = 1
+Number of CUDA devices = 4
+
+Entering GEMM Benchmarking mode! Stand by.
+
+Starting GEMM 1: M = 3200; N = 4000; K = 3136
+GEMM matched with reference successfully! Rel diff = 1.00042e-07
+Time for reference GEMM implementation: 0.0690576 seconds
+Time for my GEMM implementation: 0.21447 seconds
+Completed GEMM 1
+
+Starting GEMM 2: M = 3200; N = 400; K = 4000
+GEMM matched with reference successfully! Rel diff = 4.57243e-07
+Time for reference GEMM implementation: 0.00814952 seconds
+Time for my GEMM implementation: 0.0293013 seconds
+Completed GEMM 2
+
+Starting GEMM 3: M = 3200; N = 40; K = 4000
+GEMM matched with reference successfully! Rel diff = 7.29707e-07
+Time for reference GEMM implementation: 0.00140982 seconds
+Time for my GEMM implementation: 0.0101932 seconds
+Completed GEMM 3
+
+*** Tests are complete ***
+

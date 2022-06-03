@@ -1,0 +1,107 @@
+The master node of this job is icmet01
+This job runs on the following nodes:
+icmet01
+Starting at Thu Jun  2 22:56:06 UTC 2022
+Running on hosts: icmet01
+Running on 1 nodes.
+Running on 4 processors.
+Current working directory is /home/jelc/cme213-para/project
+
+Output from code
+----------------
+
+* Mode 1 *
+mpirun -np 3 /home/jelc/cme213-para/project/main -g 1
+Number of MPI processes = 3
+Number of CUDA devices = 4
+num_neuron=100, reg=0.0001, learning_rate=0.0005, num_epochs=40, batch_size=800
+Loading training data
+Training data information:
+Size of x_train, N =  60000
+Size of label_train = 60000
+Start Sequential Training
+Loss at iteration 0 of epoch 0/40 = 2.29525
+Loss at iteration 600 of epoch 8/40 = 2.13258
+Loss at iteration 1200 of epoch 17/40 = 1.92949
+Loss at iteration 1800 of epoch 26/40 = 1.71438
+Loss at iteration 2400 of epoch 35/40 = 1.53035
+Time for Sequential Training: 195.511 seconds
+Precision on validation set for sequential training = 0.829167
+
+Start Parallel Training
+Time for Parallel Training: 12.5171 seconds
+Precision on validation set for parallel training = 0.829167
+
+Grading mode on. Now checking for correctness...
+
+Max norm of diff b/w seq and par: W[0]: 3.02093e-16, b[0]: 1.30959e-15
+l2  norm of diff b/w seq and par: W[0]: 3.62108e-16, b[0]: 1.02922e-15
+Max norm of diff b/w seq and par: W[1]: 2.61832e-16, b[1]: 4.38086e-16
+l2  norm of diff b/w seq and par: W[1]: 2.94821e-16, b[1]: 6.4597e-16
+
+* Mode 2 *
+mpirun -np 3 /home/jelc/cme213-para/project/main -g 2
+Number of MPI processes = 3
+Number of CUDA devices = 4
+num_neuron=100, reg=0.0001, learning_rate=0.001, num_epochs=10, batch_size=800
+Loading training data
+Training data information:
+Size of x_train, N =  60000
+Size of label_train = 60000
+Start Sequential Training
+Loss at iteration 0 of epoch 0/10 = 2.29525
+Loss at iteration 150 of epoch 2/10 = 2.21258
+Loss at iteration 300 of epoch 4/10 = 2.13372
+Loss at iteration 450 of epoch 6/10 = 2.02102
+Loss at iteration 600 of epoch 8/10 = 1.94189
+Time for Sequential Training: 58.5329 seconds
+Precision on validation set for sequential training = 0.756
+
+Start Parallel Training
+Time for Parallel Training: 3.66938 seconds
+Precision on validation set for parallel training = 0.756
+
+Grading mode on. Now checking for correctness...
+
+Max norm of diff b/w seq and par: W[0]: 1.80339e-16, b[0]: 9.10186e-16
+l2  norm of diff b/w seq and par: W[0]: 2.42082e-16, b[0]: 7.84005e-16
+Max norm of diff b/w seq and par: W[1]: 2.11796e-16, b[1]: 7.59483e-16
+l2  norm of diff b/w seq and par: W[1]: 2.25128e-16, b[1]: 7.93223e-16
+
+* Mode 3 *
+mpirun -np 3 /home/jelc/cme213-para/project/main -g 3
+Number of MPI processes = 3
+Number of CUDA devices = 4
+num_neuron=100, reg=0.0001, learning_rate=0.002, num_epochs=1, batch_size=800
+Loading training data
+Training data information:
+Size of x_train, N =  60000
+Size of label_train = 60000
+Start Sequential Training
+Loss at iteration 0 of epoch 0/1 = 2.29525
+Loss at iteration 15 of epoch 0/1 = 2.27819
+Loss at iteration 30 of epoch 0/1 = 2.26099
+Loss at iteration 45 of epoch 0/1 = 2.24643
+Loss at iteration 60 of epoch 0/1 = 2.22742
+Time for Sequential Training: 7.17162 seconds
+Precision on validation set for sequential training = 0.463667
+
+Start Parallel Training
+Time for Parallel Training: 0.961396 seconds
+Precision on validation set for parallel training = 0.463667
+
+Grading mode on. Now checking for correctness...
+
+Max norm of diff b/w seq and par: W[0]: 6.52637e-17, b[0]: 8.38072e-16
+l2  norm of diff b/w seq and par: W[0]: 9.58568e-17, b[0]: 6.4239e-16
+Max norm of diff b/w seq and par: W[1]: 9.86646e-17, b[1]: 9.68347e-16
+l2  norm of diff b/w seq and par: W[1]: 1.43293e-16, b[1]: 5.82174e-16
+
+*** Summary ***
+
+2400           2.66235e-16    2.58886e-16    1.06859e-15    3.27977e-16    3.41702e-16    2.82918e-16    1.01257e-15    5.11643e-16    
+600            1.69742e-16    2.07113e-16    1.20059e-15    7.15805e-16    2.22325e-16    2.19959e-16    7.7506e-16     7.93574e-16    
+60             6.15006e-17    9.26913e-17    6.58725e-16    1.07527e-15    9.14089e-17    1.3333e-16     6.29779e-16    6.28704e-16    
+
+*** Tests are complete ***
+

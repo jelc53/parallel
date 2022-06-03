@@ -245,6 +245,25 @@ void kernel_oop_matrix_addition(nn_real* A,
 								int M, int N);
 
 
+/* Combined Gradient descent, normalization, regularization
+*  A -= l_rate*((1.0/b_size)*B + reg*A) */
+int caller_gradient_descent(nn_real* A, 
+						    nn_real* B, 
+						    nn_real reg, 
+						    nn_real l_rate,
+							nn_real b_size,
+						    int M, int N); 
+
+__global__ 
+void kernel_gradient_descent(nn_real* A, 
+							 nn_real* B, 
+						     nn_real reg, 
+						     nn_real l_rate,
+							 nn_real b_size,
+							 int M, int N);
+
+
+
 /* General matrix scalar addition: B = alpha*1 - beta*A */
 int caller_matrix_scalar_addition(nn_real* A, 
 								  nn_real* B, 

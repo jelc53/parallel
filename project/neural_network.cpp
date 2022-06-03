@@ -511,19 +511,20 @@ void parallel_regularization(d_NeuralNetwork& dnn, d_grads& dgrads, nn_real reg)
 }
 
 
-void parallel_cmbd_norm_reg_sgd(d_NeuralNetwork& dnn, 
+void parallel_norm_reg_sgd(d_NeuralNetwork& dnn, 
                                 d_grads& dgrads, 
                                 int b_size, 
                                 nn_real reg, 
-                                nn_real l) 
+                                nn_real l_rate) 
 {
   int err;
 
   // update weights: W0 = (1-reg*learning)*W0 + (-1.0)*learning*(1/b_size)*dW0
-  err =  caller_matrix_addition(dnn.d_W0,
+  err =  caller_gradient_descent(dnn.d_W0,
                                 dgrads.d_dW0, 
-                                -l*reg, 
-                                -l*(1.0/b_size),
+                                reg,
+                                l_rate, 
+                                b_size,
                                 dgrads.H1,
                                 dgrads.H0);
   if (err != 0) { 
@@ -531,35 +532,39 @@ void parallel_cmbd_norm_reg_sgd(d_NeuralNetwork& dnn,
   }
 
   // update weights: W1 = (1-reg*learning)*W1 + (-1.0)*learning*(1/b_size)*dW1
-  err =  caller_matrix_addition(dnn.d_W1,
-                                dgrads.d_dW1, 
-                                -l*reg, 
-                                -l*(1.0/b_size),
-                                dgrads.H2,
-                                dgrads.H1);
+  err =  caller_gradient_descent(dnn.d_W1,
+                                 dgrads.d_dW1, 
+                                 reg,
+                                 l_rate, 
+                                 b_size,
+                                 dgrads.H2,
+                                 dgrads.H1);
   if (err != 0) { 
     std::cout << "Error in kernel. Error code: " << err << std::endl;
   }
 
   // update biases: b0 = 1.0*b0 + (-1.0)*learning*(1/b_size)*db0
-  err =  caller_matrix_addition(dnn.d_b0,
-                                dgrads.d_db0, 
-                                1, -l*(1.0/b_size),
-                                dgrads.H1, 1);
+  err =  caller_gradient_descent(dnn.d_b0,
+                                 dgrads.d_db0, 
+                                 0,
+                                 l_rate, 
+                                 b_size,
+                                 dgrads.H1, 1);
   if (err != 0) { 
     std::cout << "Error in kernel. Error code: " << err << std::endl;
   }
 
   // update biases: b1 = 1.0*b1 + (-1.0)*learning*(1/b_size)*db1
-  err =  caller_matrix_addition(dnn.d_b1,
-                                dgrads.d_db1, 
-                                1, -l*(1.0/b_size),
-                                dgrads.H2, 1);
+  err =  caller_gradient_descent(dnn.d_b1,
+                                 dgrads.d_db1, 
+                                 0,
+                                 l_rate, 
+                                 b_size,
+                                 dgrads.H2, 1);
   if (err != 0) { 
     std::cout << "Error in kernel. Error code: " << err << std::endl;
   }
 }
-
 
 
 /*
@@ -1144,12 +1149,12 @@ void parallel_train(NeuralNetwork& nn, const arma::Mat<nn_real>& X,
 
       // gradient descent
       // std::cout << "executing gradient descent" << std::endl;
-      parallel_normalize_gradients(dgrad, b_size); 
+      // parallel_normalize_gradients(dgrad, b_size); 
 
-      parallel_regularization(dnn, dgrad, reg);
+      // parallel_regularization(dnn, dgrad, reg);
 
-      parallel_descent(dnn, dgrad, learning_rate);
-      // parallel_cmbd_norm_reg_sgd(dnn, dgrad, b_size, reg, learning_rate);
+      // parallel_descent(dnn, dgrad, learning_rate);
+      parallel_norm_reg_sgd(dnn, dgrad, b_size, reg, learning_rate);
 
       // +-*=+-*=+-*=+-*=+-*=+-*=+-*=+-*=+*-=+-*=+*-=+-*=+-*=+-*=+-*=+-*= //
       //                    POST-PROCESS OPTIONS                          //

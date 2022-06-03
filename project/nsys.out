@@ -1,0 +1,24 @@
+The master node of this job is icmet01
+This job runs on the following nodes:
+icmet01
+Starting at Sun May 29 06:39:27 UTC 2022
+Running on hosts: icmet01
+Running on 1 nodes.
+Running on 4 processors.
+Current working directory is /home/jelc/cme213-para/project
+
+Output from code
+----------------
+mpic++ -O3 -std=c++11 -DARMA_DONT_USE_WRAPPER -DARMA_USE_LAPACK -I/usr/local/cuda-11.0/samples/common/inc -Iinc -c neural_network.cpp -o obj/neural_network.o -MT obj/neural_network.o -MMD -MF dep/neural_network.d
+mpic++ obj/main.o obj/neural_network.o obj/gpu_func.o obj/mnist.o obj/neural_network_util.o obj/tests.o -o main -lblas -llapack -larmadillo -lcublas -lcudart
+Number of MPI processes = 4
+Number of CUDA devices = 4
+num_neuron=100, reg=0.0001, learning_rate=0.001, num_epochs=1, batch_size=800
+Loading training data
+Training data information:
+Size of x_train, N =  60000
+Size of label_train = 60000
+
+Start Parallel Training
+Time for Parallel Training: 0.545974 seconds
+Precision on validation set for parallel training = 0.298833

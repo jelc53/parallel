@@ -1,0 +1,126 @@
+The master node of this job is icmet02
+This job runs on the following nodes:
+icmet02
+Starting at Thu Jun  2 16:21:02 UTC 2022
+Running on hosts: icmet02
+Running on 1 nodes.
+Running on 4 processors.
+Current working directory is /home/jelc/cme213-para/project
+
+Output from code
+----------------
+
+*** Grading mode 4 ***
+
+main -g 4
+Number of MPI processes = 1
+Number of CUDA devices = 4
+
+Entering GEMM Benchmarking mode! Stand by.
+
+Starting GEMM 0: M = 3200; N = 40000; K = 3136
+GEMM matched with reference successfully! Rel diff = 9.78645e-08
+Time for reference GEMM implementation: 0.58647 seconds
+Time for my GEMM implementation: 1.90872 seconds
+Completed GEMM 0
+
+Starting GEMM 1: M = 3200; N = 4000; K = 3136
+GEMM matched with reference successfully! Rel diff = 1.00042e-07
+Time for reference GEMM implementation: 0.057493 seconds
+Time for my GEMM implementation: 0.190527 seconds
+Completed GEMM 1
+
+Starting GEMM 2: M = 3200; N = 400; K = 4000
+GEMM matched with reference successfully! Rel diff = 4.57243e-07
+Time for reference GEMM implementation: 0.0081186 seconds
+Time for my GEMM implementation: 0.0293541 seconds
+Completed GEMM 2
+
+Starting GEMM 3: M = 3200; N = 40; K = 4000
+GEMM matched with reference successfully! Rel diff = 7.29707e-07
+Time for reference GEMM implementation: 0.00140834 seconds
+Time for my GEMM implementation: 0.0102002 seconds
+Completed GEMM 3
+
+Starting Add'l GEMM 0: M = 32; N = 4000; K = 40
+GEMM matched with reference successfully! Rel diff = 9.33643e-08
+Time for reference GEMM implementation: 6.3831e-05 seconds
+Time for my GEMM implementation: 0.000130939 seconds
+
+Starting Add'l GEMM 1: M = 32; N = 4000; K = 400
+GEMM matched with reference successfully! Rel diff = 1.77087e-07
+Time for reference GEMM implementation: 0.00027787 seconds
+Time for my GEMM implementation: 0.00118688 seconds
+
+Starting Add'l GEMM 2: M = 32; N = 4000; K = 4000
+GEMM matched with reference successfully! Rel diff = 4.89473e-07
+Time for reference GEMM implementation: 0.0019565 seconds
+Time for my GEMM implementation: 0.0114392 seconds
+
+Starting Add'l GEMM 3: M = 32; N = 4000; K = 40000
+GEMM matched with reference successfully! Rel diff = 4.41364e-07
+Time for reference GEMM implementation: 0.0222238 seconds
+Time for my GEMM implementation: 0.116778 seconds
+
+Starting Add'l GEMM 4: M = 320; N = 4000; K = 40
+GEMM matched with reference successfully! Rel diff = 9.82023e-08
+Time for reference GEMM implementation: 0.000341901 seconds
+Time for my GEMM implementation: 0.000570447 seconds
+
+Starting Add'l GEMM 5: M = 320; N = 4000; K = 400
+GEMM matched with reference successfully! Rel diff = 9.58354e-08
+Time for reference GEMM implementation: 0.00105603 seconds
+Time for my GEMM implementation: 0.00290394 seconds
+
+Starting Add'l GEMM 6: M = 320; N = 4000; K = 4000
+GEMM matched with reference successfully! Rel diff = 4.00242e-07
+Time for reference GEMM implementation: 0.0092044 seconds
+Time for my GEMM implementation: 0.0294056 seconds
+
+Starting Add'l GEMM 7: M = 320; N = 4000; K = 40000
+GEMM matched with reference successfully! Rel diff = 3.48021e-07
+Time for reference GEMM implementation: 0.185931 seconds
+Time for my GEMM implementation: 0.314287 seconds
+
+Starting Add'l GEMM 8: M = 3200; N = 4000; K = 40
+GEMM matched with reference successfully! Rel diff = 1.00589e-07
+Time for reference GEMM implementation: 0.00256085 seconds
+Time for my GEMM implementation: 0.00336419 seconds
+
+Starting Add'l GEMM 9: M = 3200; N = 4000; K = 400
+GEMM matched with reference successfully! Rel diff = 9.84265e-08
+Time for reference GEMM implementation: 0.00765469 seconds
+Time for my GEMM implementation: 0.0205763 seconds
+
+Starting Add'l GEMM 10: M = 3200; N = 4000; K = 4000
+GEMM matched with reference successfully! Rel diff = 9.56159e-08
+Time for reference GEMM implementation: 0.0746039 seconds
+Time for my GEMM implementation: 0.242294 seconds
+
+Starting Add'l GEMM 11: M = 3200; N = 4000; K = 40000
+GEMM matched with reference successfully! Rel diff = 3.48907e-07
+Time for reference GEMM implementation: 0.794253 seconds
+Time for my GEMM implementation: 2.64109 seconds
+
+Starting Add'l GEMM 12: M = 32000; N = 4000; K = 40
+GEMM matched with reference successfully! Rel diff = 1.04518e-07
+Time for reference GEMM implementation: 0.0252022 seconds
+Time for my GEMM implementation: 0.0271026 seconds
+
+Starting Add'l GEMM 13: M = 32000; N = 4000; K = 400
+GEMM matched with reference successfully! Rel diff = 9.97954e-08
+Time for reference GEMM implementation: 0.0998442 seconds
+Time for my GEMM implementation: 0.228721 seconds
+
+Starting Add'l GEMM 14: M = 32000; N = 4000; K = 4000
+GEMM matched with reference successfully! Rel diff = 1.01778e-07
+Time for reference GEMM implementation: 0.827255 seconds
+Time for my GEMM implementation: 2.44187 seconds
+
+Starting Add'l GEMM 15: M = 32000; N = 4000; K = 40000
+GEMM matched with reference successfully! Rel diff = 1.06047e-07
+Time for reference GEMM implementation: 9.20758 seconds
+Time for my GEMM implementation: 28.6704 seconds
+
+*** Tests are complete ***
+

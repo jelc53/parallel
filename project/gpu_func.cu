@@ -1029,6 +1029,43 @@ int caller_oop_matrix_addition(nn_real* A,
 }
 
 
+/* Combined Gradient descent, normalization, regularization
+*  A -= l_rate*((1.0/b_size)*B + reg*A) */
+/* General matrix addition: C = alpha*A + beta*B */
+__global__ 
+void kernel_gradient_descent(nn_real* A, 
+                             nn_real* B, 
+						     nn_real reg, 
+						     nn_real l_rate,
+							 nn_real b_size,
+                             int M, int N) 
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < M && col < N) 
+	    A[row + col*M] -= l_rate*((1.0/b_size)*B[row + col*M] + reg*A[row + col*M]);
+}
+
+int caller_gradient_descent(nn_real* A, 
+                            nn_real* B, 
+						    nn_real reg, 
+						    nn_real l_rate,
+							nn_real b_size,
+                            int M, int N) 
+{
+    // Thread block, grid dimensions
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    int dimGrid_x = (N + dimBlock.x - 1) / dimBlock.x;
+    int dimGrid_y = (M + dimBlock.y - 1) / dimBlock.y;
+    dim3 dimGrid(dimGrid_x, dimGrid_y);
+
+    // Launch matrix-multiplication kernel
+    kernel_gradient_descent<<<dimGrid, dimBlock>>>(A, B, reg, l_rate, b_size, M, N); 
+    return 0;
+}
+
+
 /* General matrix scalar addition: B = alpha*1 + beta*A */
 __global__ 
 void kernel_matrix_scalar_addition(nn_real* A, 

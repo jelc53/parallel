@@ -1,0 +1,109 @@
+The master node of this job is icmet04
+This job runs on the following nodes:
+icmet04
+Starting at Sat May 28 01:16:51 UTC 2022
+Running on hosts: icmet04
+Running on 1 nodes.
+Running on 4 processors.
+Current working directory is /home/jelc/cme213-para/project
+
+Output from code
+----------------
+
+* Mode 1 *
+mpirun -np 1 /home/jelc/cme213-para/project/main -g 1
+Number of MPI processes = 1
+Number of CUDA devices = 4
+num_neuron=100, reg=0.0001, learning_rate=0.0005, num_epochs=40, batch_size=800
+Loading training data
+Training data information:
+Size of x_train, N =  60000
+Size of label_train = 60000
+
+Start Parallel Training
+Time for Parallel Training: 7.85949 seconds
+Precision on validation set for parallel training = 0.829167
+
+Grading mode on. Now checking for correctness...
+
+Max norm of diff b/w seq and par: W[0]: 1.54722e-07, b[0]: 5.94913e-07
+l2  norm of diff b/w seq and par: W[0]: 1.90251e-07, b[0]: 5.54432e-07
+Max norm of diff b/w seq and par: W[1]: 1.5259e-07, b[1]: 1.91096e-07
+l2  norm of diff b/w seq and par: W[1]: 1.55346e-07, b[1]: 2.35015e-07
+
+* Mode 2 *
+mpirun -np 1 /home/jelc/cme213-para/project/main -g 2
+Number of MPI processes = 1
+Number of CUDA devices = 4
+num_neuron=100, reg=0.0001, learning_rate=0.001, num_epochs=10, batch_size=800
+Loading training data
+Training data information:
+Size of x_train, N =  60000
+Size of label_train = 60000
+
+Start Parallel Training
+Time for Parallel Training: 2.24912 seconds
+Precision on validation set for parallel training = 0.756
+
+Grading mode on. Now checking for correctness...
+
+Max norm of diff b/w seq and par: W[0]: 8.94932e-08, b[0]: 4.61505e-07
+l2  norm of diff b/w seq and par: W[0]: 1.23037e-07, b[0]: 4.71446e-07
+Max norm of diff b/w seq and par: W[1]: 1.46356e-07, b[1]: 4.07745e-07
+l2  norm of diff b/w seq and par: W[1]: 1.54429e-07, b[1]: 3.5195e-07
+
+* Mode 3 *
+mpirun -np 1 /home/jelc/cme213-para/project/main -g 3
+Number of MPI processes = 1
+Number of CUDA devices = 4
+num_neuron=100, reg=0.0001, learning_rate=0.002, num_epochs=1, batch_size=800
+Loading training data
+Training data information:
+Size of x_train, N =  60000
+Size of label_train = 60000
+
+Start Parallel Training
+Time for Parallel Training: 0.56508 seconds
+Precision on validation set for parallel training = 0.463667
+
+Grading mode on. Now checking for correctness...
+
+Max norm of diff b/w seq and par: W[0]: 3.62044e-08, b[0]: 4.51159e-07
+l2  norm of diff b/w seq and par: W[0]: 5.70983e-08, b[0]: 3.23318e-07
+Max norm of diff b/w seq and par: W[1]: 6.22334e-08, b[1]: 2.59939e-07
+l2  norm of diff b/w seq and par: W[1]: 7.5405e-08, b[1]: 1.77756e-07
+
+*** Summary ***
+
+2400           1.40465e-07    1.45118e-07    6.03892e-07    1.9369e-07     1.75842e-07    1.51356e-07    5.24816e-07    2.36566e-07    
+600            8.31383e-08    1.35914e-07    6.12333e-07    3.84295e-07    1.13652e-07    1.48703e-07    4.68868e-07    3.25847e-07    
+60             3.33698e-08    6.31382e-08    4.08258e-07    2.66437e-07    5.36129e-08    7.22897e-08    3.02703e-07    1.9781e-07     
+
+*** Grading mode 4 ***
+
+main -g 4
+Number of MPI processes = 1
+Number of CUDA devices = 4
+
+Entering GEMM Benchmarking mode! Stand by.
+
+Starting GEMM 1: M = 3200; N = 4000; K = 3136
+GEMM matched with reference successfully! Rel diff = 1.00042e-07
+Time for reference GEMM implementation: 0.0708054 seconds
+Time for my GEMM implementation: 6.16892 seconds
+Completed GEMM 1
+
+Starting GEMM 2: M = 3200; N = 400; K = 4000
+GEMM matched with reference successfully! Rel diff = 4.57243e-07
+Time for reference GEMM implementation: 0.00839352 seconds
+Time for my GEMM implementation: 0.807746 seconds
+Completed GEMM 2
+
+Starting GEMM 3: M = 3200; N = 40; K = 4000
+GEMM matched with reference successfully! Rel diff = 7.29707e-07
+Time for reference GEMM implementation: 0.00144497 seconds
+Time for my GEMM implementation: 0.103073 seconds
+Completed GEMM 3
+
+*** Tests are complete ***
+

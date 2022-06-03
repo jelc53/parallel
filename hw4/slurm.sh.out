@@ -1,0 +1,19 @@
+Starting at Thu May 19 04:41:56 UTC 2022
+
+nvcc -c main.cu --fmad=false -O3 -arch=compute_75 -code=sm_75 -Xcompiler -Wall,-Winline,-Wextra,-Wno-strict-aliasing -std=c++11
+nvcc main.o simParams.o Grid.o -lcudart --fmad=false -O3 -arch=compute_75 -code=sm_75 -Xcompiler -Wall,-Winline,-Wextra,-Wno-strict-aliasing -std=c++11 -o main
+
+Output from main
+----------------
+Order: 8, 4096x4096, 100 iterations
+                     time (ms)     GBytes/sec
+            CPU        2661.73        45.3824
+         Global        50.2889        2402.04
+          Block        37.3118        3237.48
+         Shared        41.8833        2884.11
+
+                         L2Ref           LInf          L2Err
+         Global       0.447065              0              0
+          Block       0.447065              0              0
+         Shared       0.447065              0              0
+

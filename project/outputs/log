@@ -1,0 +1,12 @@
+47424 - GEMM algorithm #1
+50712 - CUDA parallel train
+51779 - CUDA + MPI N = 1, 2, 4
+53340 - CUDA + MPI N = 1, 2, 3, 4
+53880 - GEMM algorithm #2
+54161 - GEMM algorithm #3
+54547 - NNet results after GEMM #3 kernel updates
+54689 - NNet results after GEMM #3 kernel updates (double precision)
+54801 - NNet results after incorporating transpose into existing kernels
+54807 - NNet results after combined gradient descent with regularization
+
+
