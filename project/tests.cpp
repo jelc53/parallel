@@ -255,10 +255,10 @@ void TestGEMM(int M, int N, int K) {
 void BenchmarkGEMM() {
   std::cout << std::endl
             << "Entering GEMM Benchmarking mode! Stand by." << std::endl;
+  int M, N, K;
 
   /* Zeroth GEMM problem size */
-  int M = 800 * SCALE, N = 10000 * SCALE, K = 1000*SCALE;// 784 * SCALE;
-
+  M = 800 * SCALE, N = 10000 * SCALE, K = 1000*SCALE;// 784 * SCALE;
   std::cout << std::endl
             << "Starting GEMM 0: "
             << "M = " << M << "; N = " << N << "; K = " << K << std::endl;
