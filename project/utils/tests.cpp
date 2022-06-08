@@ -1,5 +1,6 @@
 #include "tests.h"
 
+#include <math.h>
 #include <chrono>
 #include <fstream>
 #include <iomanip>
@@ -229,6 +230,8 @@ void TestGEMM(int M, int N, int K) {
 
   cudaMemcpy(C1, dC1, sizeof(nn_real) * M * N, cudaMemcpyDeviceToHost);
 
+  //std::cout << "C1: " << C1[0] << " " << C1[1] << " " << C1[2] << std::endl;
+  //std::cout << "C2: " << C2[0] << " " << C2[1] << " " << C2[2] << std::endl;
   int fail = compareGEMMResults(C1, C2, M, N);
 
   if (fail == 0) {
@@ -252,10 +255,18 @@ void TestGEMM(int M, int N, int K) {
 void BenchmarkGEMM() {
   std::cout << std::endl
             << "Entering GEMM Benchmarking mode! Stand by." << std::endl;
+  int M, N, K;
+
+  /* Zeroth GEMM problem size */
+  M = 800 * SCALE, N = 10000 * SCALE, K = 1000*SCALE;// 784 * SCALE;
+  std::cout << std::endl
+            << "Starting GEMM 0: "
+            << "M = " << M << "; N = " << N << "; K = " << K << std::endl;
+  TestGEMM(M, N, K);
+  std::cout << "Completed GEMM 0" << std::endl;
 
   /* First GEMM problem size */
-  int M = 800 * SCALE, N = 1000 * SCALE, K = 784 * SCALE;
-
+  M = 800 * SCALE, N = 1000 * SCALE, K = 1000*SCALE;//784 * SCALE;
   std::cout << std::endl
             << "Starting GEMM 1: "
             << "M = " << M << "; N = " << N << "; K = " << K << std::endl;
@@ -277,4 +288,18 @@ void BenchmarkGEMM() {
             << "M = " << M << "; N = " << N << "; K = " << K << std::endl;
   TestGEMM(M, N, K);
   std::cout << "Completed GEMM 3" << std::endl;
+
+  /* ----- Additional banchmarking ----- */
+  // /* Fourth GEMM problem size */
+  // for (int i = 0; i < 4; i++) {
+  //   for (int j = 0; j < 4; j++) {
+  //       M = SCALE * 8*pow(10, i);
+  //       N = 1000 * SCALE;
+  //       K = SCALE * 10*pow(10, j);
+  //       std::cout << std::endl
+  //           << "Starting Add'l GEMM " << i*4 + j << ": "
+  //           << "M = " << M << "; N = " << N << "; K = " << K << std::endl;
+  //       TestGEMM(M, N, K);
+  //   }
+  // }
 }
